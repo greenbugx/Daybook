@@ -1,4 +1,6 @@
 import hacktoberfestImg from '../assets/images/hacktoberfest.webp'
+import flowerImg from '../assets/images/flower.webp'
+import leafImg from '../assets/images/leaf.webp'
 
 interface AboutPageProps {
   onStartWriting?: () => void
@@ -9,6 +11,24 @@ export function AboutPage({ onStartWriting }: AboutPageProps) {
     <div className="w-full max-w-3xl mx-auto py-4 sm:py-8 md:py-12 animate-in fade-in duration-500 select-none">
       <div className="space-y-10 sm:space-y-14">
         <div>
+          <div className="flex items-center justify-center gap-2 mb-4 pointer-events-none select-none">
+            <img
+              src={leafImg}
+              alt=""
+              className="w-7 sm:w-9 h-auto object-contain -rotate-[38deg] drop-shadow-sm opacity-90"
+            />
+            <img
+              src={flowerImg}
+              alt=""
+              className="w-10 sm:w-12 h-auto object-contain rotate-6 drop-shadow-sm"
+            />
+            <img
+              src={leafImg}
+              alt=""
+              className="w-7 sm:w-9 h-auto object-contain rotate-[38deg] -scale-x-100 drop-shadow-sm opacity-90"
+            />
+          </div>
+
           <h1
             className="text-5xl sm:text-6xl md:text-7xl text-[#1a2b49] text-center tracking-wide leading-tight mb-6 sm:mb-8"
             style={{ fontFamily: "'Cedarville Cursive', cursive" }}
@@ -94,6 +114,19 @@ export function AboutPage({ onStartWriting }: AboutPageProps) {
         </div>
 
         <div className="text-center pt-8 sm:pt-12 border-t border-slate-200/50 space-y-3">
+          <div className="flex items-center justify-center gap-2 pt-1 pb-1 pointer-events-none select-none">
+            <img
+              src={flowerImg}
+              alt=""
+              className="w-8 sm:w-10 h-auto object-contain -rotate-12 drop-shadow-sm"
+            />
+            <img
+              src={leafImg}
+              alt=""
+              className="w-5 sm:w-6 h-auto object-contain rotate-12 drop-shadow-sm opacity-85"
+            />
+          </div>
+
           <p
             className="text-3xl sm:text-4xl text-[#4f8ee6]"
             style={{ fontFamily: "'Cedarville Cursive', cursive" }}

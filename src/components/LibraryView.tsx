@@ -1,5 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Headphones, Copy, Check, Heart } from 'lucide-react'
+import flowerImg from '../assets/images/flower.webp'
+import leafImg from '../assets/images/leaf.webp'
 import { getSavedQuotes, unsaveQuote, type SavedQuote } from '../lib/api'
 
 function formatLikedAt(value: string): string {
@@ -75,8 +77,12 @@ export function LibraryView() {
             <p className="text-xs text-slate-400">Loading your saved quotes...</p>
           </div>
         ) : quotes.length === 0 ? (
-          <div className="bg-[#FAF9F5] rounded-2xl border border-dashed border-slate-200 p-4 text-center">
-            <p className="text-xs text-slate-400">
+          <div className="bg-[#FAF9F5] rounded-2xl border border-dashed border-slate-200 p-6 text-center flex flex-col items-center justify-center">
+            <div className="flex items-center justify-center gap-1.5 mb-2.5 pointer-events-none select-none">
+              <img src={leafImg} alt="" className="w-5 h-auto object-contain -rotate-45 opacity-80" />
+              <img src={flowerImg} alt="" className="w-8 h-auto object-contain" />
+            </div>
+            <p className="text-xs text-slate-400 max-w-xs">
               No saved quotes yet. Click the heart on daily quotes to save them here.
             </p>
           </div>

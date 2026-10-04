@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react'
 import { Sparkles, Heart, Share2, Sun, Flame } from 'lucide-react'
 import sceneImg from '../assets/images/scene.webp'
+import flowerImg from '../assets/images/flower.webp'
+import leafImg from '../assets/images/leaf.webp'
 import { OpenJournalSpread } from './OpenJournalSpread'
 import type { JournalTextStyle } from './journalTextStyle'
 import type { Journal, SaveJournalInput } from '../lib/api'
@@ -354,6 +356,64 @@ export function InteractiveBook({
               </div>
             </div>
           </div>
+        </div>
+      </div>
+
+      <div
+        className={`absolute -bottom-4 sm:-bottom-5 -left-5 sm:-left-7 z-30 pointer-events-none select-none transition-all duration-300 ${
+          isFlipped || stage !== 'closed'
+            ? 'opacity-0 scale-90 translate-y-2'
+            : 'opacity-100 scale-100 translate-y-0 group-hover:-translate-y-0.5 group-hover:scale-105'
+        }`}
+      >
+        <div className="relative">
+          <img
+            src={leafImg}
+            alt=""
+            className="w-9 sm:w-11 md:w-13 h-auto object-contain -rotate-[42deg] drop-shadow-[0_2px_4px_rgba(20,40,65,0.18)] translate-x-1 translate-y-2"
+          />
+          <img
+            src={flowerImg}
+            alt=""
+            className="w-13 sm:w-15 md:w-17 h-auto object-contain absolute -top-4 -left-2 rotate-[-10deg] drop-shadow-[0_4px_8px_rgba(20,40,65,0.22)]"
+          />
+        </div>
+      </div>
+
+      <div
+        className={`absolute -top-1.5 sm:-top-2.5 -right-3.5 sm:-right-4.5 z-30 pointer-events-none select-none transition-all duration-300 ${
+          isFlipped || stage !== 'closed'
+            ? 'opacity-0 scale-90 -translate-y-2'
+            : 'opacity-100 scale-100 translate-y-0 group-hover:translate-y-0.5 group-hover:scale-105'
+        }`}
+      >
+        <div className="relative">
+          <img
+            src={leafImg}
+            alt=""
+            className="w-7 sm:w-9 md:w-11 h-auto object-contain rotate-[65deg] drop-shadow-[0_2px_4px_rgba(20,40,65,0.18)] -translate-x-1"
+          />
+          <img
+            src={flowerImg}
+            alt=""
+            className="w-11 sm:w-13 md:w-15 h-auto object-contain absolute top-0 -right-1 rotate-[20deg] drop-shadow-[0_4px_8px_rgba(20,40,65,0.22)]"
+          />
+        </div>
+      </div>
+
+      <div
+        className={`absolute -bottom-3 sm:-bottom-4 -right-3 sm:-right-4 z-20 pointer-events-none select-none transition-all duration-300 ${
+          isFlipped || stage !== 'closed'
+            ? 'opacity-0 scale-90 translate-y-2'
+            : 'opacity-90 scale-100 translate-y-0 group-hover:-translate-y-0.5 group-hover:scale-105'
+        }`}
+      >
+        <div className="relative">
+          <img
+            src={leafImg}
+            alt=""
+            className="w-8 sm:w-10 h-auto object-contain rotate-[98deg] drop-shadow-[0_2px_4px_rgba(20,40,65,0.18)]"
+          />
         </div>
       </div>
     </div>

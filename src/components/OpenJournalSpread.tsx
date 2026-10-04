@@ -133,10 +133,9 @@ export function OpenJournalSpread({
   const [memoryError, setMemoryError] = useState<string | null>(null)
   const [editingMemoryId, setEditingMemoryId] = useState<string | null>(null)
   const [memoryDraft, setMemoryDraft] = useState('')
-  const [isMemoryPanelOpen, setIsMemoryPanelOpen] = useState(false)
   const [memoryStatusIndex, setMemoryStatusIndex] = useState(0)
   const [knowledge, setKnowledge] = useState<AiKnowledge | null>(null)
-  const [isKnowledgeOpen, setIsKnowledgeOpen] = useState(false)
+  const [aiInsightTab, setAiInsightTab] = useState<'noticed' | 'remembers' | 'knowledge'>('noticed')
   const [entryHtml, setEntryHtml] = useState('')
   const [entryText, setEntryText] = useState('')
   const [locationText, setLocationText] = useState('')
@@ -794,6 +793,7 @@ const photo = entryDate && photoState?.date === entryDate ? photoState : null
     try {
       const items = await generateJournalObservations(entryDate)
       setObservationState({ date: entryDate, items })
+      setAiInsightTab('noticed')
     } catch (err) {
       setObservationError(err instanceof Error ? err.message : 'Could not generate observations')
     } finally {
@@ -850,7 +850,9 @@ const photo = entryDate && photoState?.date === entryDate ? photoState : null
     setMemoryStatusIndex(0)
     setMemoryError(null)
     try {
-      setMemorySuggestions(await generateMemorySuggestions())
+      const suggestions = await generateMemorySuggestions()
+      setMemorySuggestions(suggestions)
+      setAiInsightTab('remembers')
     } catch (err) {
       setMemoryError(err instanceof Error ? err.message : 'Could not find patterns')
     } finally {
@@ -1014,63 +1016,106 @@ const photo = entryDate && photoState?.date === entryDate ? photoState : null
       <div className="relative w-full h-full flex flex-col gap-2 md:gap-0 md:flex-row rounded-[18px] sm:rounded-[22px] overflow-visible md:overflow-hidden bg-transparent shadow-sm scrollbar-none">
         <div className="flex-1 min-h-0 md:h-full bg-[#FAF9F5] rounded-[18px] md:rounded-t-none md:rounded-l-[20px] md:rounded-r-none border-r-0 md:border-r border-slate-200/60 p-3.5 sm:p-3.5 flex flex-col justify-between relative shadow-[inset_0_-10px_12px_-8px_rgba(15,30,55,0.12)] md:shadow-[inset_-4px_0_8px_rgba(0,0,0,0.02)] md:overflow-hidden">
           <div className="space-y-2 sm:space-y-2.5 flex-1 min-h-0 flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between flex-shrink-0">
-              <div className="flex items-center gap-2 relative" ref={weatherDropdownRef}>
-                <button
-                  type="button"
-                  onClick={() => setIsWeatherPickerOpen((prev) => !prev)}
-                  title="Choose day weather"
-                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-50 hover:bg-amber-100/80 border border-amber-200/70 flex items-center justify-center text-amber-500 transition-all hover:scale-105 cursor-pointer shadow-2xs"
-                >
-                  <ActiveWeatherIcon className="w-4 h-4 stroke-[2.2]" />
-                </button>
+            <div className="flex items-start justify-between gap-2.5 flex-shrink-0">
+              <div className="flex flex-col justify-between self-stretch min-w-0 flex-1 py-0.5">
+                <div className="flex items-center gap-2 relative" ref={weatherDropdownRef}>
+                  <button
+                    type="button"
+                    onClick={() => setIsWeatherPickerOpen((prev) => !prev)}
+                    title="Choose day weather"
+                    className="w-7 h-7 sm:w-8 sm:h-8 rounded-xl bg-amber-50 hover:bg-amber-100/80 border border-amber-200/70 flex items-center justify-center text-amber-500 transition-all hover:scale-105 cursor-pointer shadow-2xs flex-shrink-0"
+                  >
+                    <ActiveWeatherIcon className="w-4 h-4 stroke-[2.2]" />
+                  </button>
 
-                {isWeatherPickerOpen && (
-                  <div className="absolute top-10 left-0 z-50 bg-white rounded-2xl shadow-xl border border-slate-100 p-1.5 min-w-[140px] animate-in fade-in zoom-in-95 duration-150">
-                    <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider px-2 py-0.5 block">
-                      Day Weather
+                  {isWeatherPickerOpen && (
+                    <div className="absolute top-9 left-0 z-50 bg-white rounded-2xl shadow-xl border border-slate-100 p-1.5 min-w-[135px] animate-in fade-in zoom-in-95 duration-150">
+                      <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider px-2 py-0.5 block">
+                        Day Weather
+                      </span>
+                      {weatherOptions.map((opt) => {
+                        const Icon = opt.icon
+                        const isSelected = weather === opt.type
+                        return (
+                          <button
+                            key={opt.type}
+                            type="button"
+                            onClick={() => {
+                              setWeather(opt.type)
+                              setIsWeatherPickerOpen(false)
+                            }}
+                            className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
+                              isSelected
+                                ? 'bg-[#eff6fc] text-[#4f8ee6] font-semibold'
+                                : 'text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            <Icon className="w-3.5 h-3.5 text-amber-500" />
+                            <span>{opt.label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
+
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-xs sm:text-sm font-bold text-slate-700 leading-tight truncate">
+                      {dayName}
                     </span>
-                    {weatherOptions.map((opt) => {
-                      const Icon = opt.icon
-                      const isSelected = weather === opt.type
-                      return (
-                        <button
-                          key={opt.type}
-                          type="button"
-                          onClick={() => {
-                            setWeather(opt.type)
-                            setIsWeatherPickerOpen(false)
-                          }}
-                          className={`w-full flex items-center gap-2 px-2 py-1 rounded-lg text-xs font-medium transition-colors cursor-pointer ${
-                            isSelected
-                              ? 'bg-[#eff6fc] text-[#4f8ee6] font-semibold'
-                              : 'text-slate-600 hover:bg-slate-50'
-                          }`}
-                        >
-                          <Icon className="w-3.5 h-3.5 text-amber-500" />
-                          <span>{opt.label}</span>
-                        </button>
-                      )
-                    })}
+                    <span className="text-[10px] sm:text-xs text-slate-400 font-medium leading-tight truncate">
+                      {formattedDate}
+                    </span>
                   </div>
-                )}
+                </div>
 
-                <div className="flex flex-col">
-                  <span className="text-xs sm:text-sm font-bold text-slate-700 leading-tight">
-                    {dayName}
-                  </span>
-                  <span className="text-[10px] sm:text-xs text-slate-400 font-medium leading-tight">
-                    {formattedDate}
-                  </span>
+                <div className="relative pt-1 sm:pt-1.5" ref={moodDropdownRef}>
+                  <div className="flex flex-col gap-0.5">
+                    <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">
+                      Today&apos;s Mood
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => setIsMoodPickerOpen((prev) => !prev)}
+                      className="inline-flex items-center justify-between gap-1.5 px-2 py-0.5 sm:py-1 rounded-lg border border-slate-200/80 bg-white hover:border-[#6eafe9] text-slate-700 text-[10px] sm:text-[11px] font-medium shadow-2xs transition-all cursor-pointer w-fit max-w-full"
+                    >
+                      <div className="flex items-center gap-1 min-w-0">
+                        <span className="text-xs">{activeMood.emoji}</span>
+                        <span className="truncate">{activeMood.label}</span>
+                      </div>
+                      <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform flex-shrink-0 ${isMoodPickerOpen ? 'rotate-180' : ''}`} />
+                    </button>
+                  </div>
+
+                  {isMoodPickerOpen && (
+                    <div className="absolute top-full mt-1 left-0 z-50 bg-white rounded-2xl shadow-xl border border-slate-100 p-1.5 w-48 sm:w-52 max-h-[220px] overflow-y-auto animate-in fade-in zoom-in-95 duration-150 grid grid-cols-2 gap-1">
+                      {moods.map((m) => {
+                        const isSelected = selectedMood === m.id
+                        return (
+                          <button
+                            key={m.id}
+                            type="button"
+                            onClick={() => {
+                              setSelectedMood(m.id)
+                              setIsMoodPickerOpen(false)
+                            }}
+                            className={`w-full flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-medium transition-colors cursor-pointer text-left ${
+                              isSelected
+                                ? 'bg-[#eff6fc] text-[#4f8ee6] font-semibold'
+                                : 'text-slate-600 hover:bg-slate-50'
+                            }`}
+                          >
+                            <span className="text-xs">{m.emoji}</span>
+                            <span className="truncate">{m.label}</span>
+                          </button>
+                        )
+                      })}
+                    </div>
+                  )}
                 </div>
               </div>
 
-
-            </div>
-
-            <div className="flex flex-col items-center flex-shrink-0 max-md:w-full">
-              <div className="relative group/photo w-full max-w-[200px] sm:max-w-none sm:w-40 md:w-44 lg:w-48 bg-white rounded-2xl p-1.5 pb-2 sm:p-2 sm:pb-2.5 shadow-sm border border-slate-200/60 transition-transform duration-200 hover:-rotate-1">
-                <div className="relative w-full h-16 sm:h-24 md:h-26 lg:h-28 rounded-xl overflow-hidden bg-slate-100 border border-slate-200/40">
+              <div className="relative group/photo w-36 sm:w-42 md:w-44 flex-shrink-0 bg-white rounded-2xl p-2 pb-2.5 shadow-sm border border-slate-200/60 transition-transform duration-200 hover:-rotate-1">
+                <div className="relative w-full h-20 sm:h-22 md:h-25 rounded-xl overflow-hidden bg-slate-100 border border-slate-200/40">
                   <img
                     src={photoUrl}
                     alt="Journal moment"
@@ -1081,10 +1126,10 @@ const photo = entryDate && photoState?.date === entryDate ? photoState : null
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
                       disabled={isSavingPhoto}
-                      className="px-2.5 py-1 rounded-md bg-white/95 text-slate-800 text-[11px] font-semibold shadow-sm hover:bg-white flex items-center gap-1 cursor-pointer transition-transform hover:scale-105 disabled:opacity-50"
+                      className="px-2 py-0.5 rounded-md bg-white/95 text-slate-800 text-[10px] font-semibold shadow-sm hover:bg-white flex items-center gap-1 cursor-pointer transition-transform hover:scale-105 disabled:opacity-50"
                       title="Upload photo"
                     >
-                      <Upload className="w-3.5 h-3.5" />
+                      <Upload className="w-3 h-3" />
                       <span>Upload</span>
                     </button>
                     {photoUrl !== defaultPhoto && (
@@ -1092,10 +1137,10 @@ const photo = entryDate && photoState?.date === entryDate ? photoState : null
                         type="button"
                         onClick={removePhoto}
                         disabled={isSavingPhoto}
-                        className="p-1 rounded-md bg-white/95 text-slate-800 shadow-sm hover:bg-white cursor-pointer transition-transform hover:scale-105 disabled:opacity-50"
+                        className="p-0.5 rounded-md bg-white/95 text-slate-800 shadow-sm hover:bg-white cursor-pointer transition-transform hover:scale-105 disabled:opacity-50"
                         title="Remove photo"
                       >
-                        <RotateCcw className="w-3.5 h-3.5" />
+                        <RotateCcw className="w-3 h-3" />
                       </button>
                     )}
                   </div>
@@ -1107,7 +1152,7 @@ const photo = entryDate && photoState?.date === entryDate ? photoState : null
                 </div>
 
                 {photoError && (
-                  <p className="text-[10px] text-rose-600 leading-tight pt-1">{photoError}</p>
+                  <p className="text-[9px] text-rose-600 leading-tight pt-1">{photoError}</p>
                 )}
 
                 <input
@@ -1128,12 +1173,12 @@ const photo = entryDate && photoState?.date === entryDate ? photoState : null
                       onKeyDown={(e) => e.key === 'Enter' && setIsEditingTopic(false)}
                       placeholder="Today's Topic"
                       autoFocus
-                      className="text-[11px] sm:text-xs font-medium text-slate-700 text-center w-full bg-slate-50 border-b border-[#6eafe9] px-1 py-0.5 focus:outline-none"
+                      className="text-[10.5px] sm:text-xs font-medium text-slate-700 text-center w-full bg-slate-50 border-b border-[#6eafe9] px-1 py-0.5 focus:outline-none"
                     />
                   ) : (
                     <p
                       onClick={() => setIsEditingTopic(true)}
-                      className={`text-[11px] sm:text-xs font-medium truncate px-0.5 cursor-pointer hover:text-[#4f8ee6] transition-colors ${
+                      className={`text-[10.5px] sm:text-xs font-medium truncate px-0.5 cursor-pointer hover:text-[#4f8ee6] transition-colors ${
                         topic ? 'text-slate-600' : 'text-slate-400 italic'
                       }`}
                       title="Click to edit topic"
@@ -1145,60 +1190,19 @@ const photo = entryDate && photoState?.date === entryDate ? photoState : null
               </div>
             </div>
 
-            <div className="relative flex items-center justify-between flex-shrink-0" ref={moodDropdownRef}>
-              <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">
-                Today&apos;s Mood
-              </span>
-              <button
-                type="button"
-                onClick={() => setIsMoodPickerOpen((prev) => !prev)}
-                className="flex items-center gap-1.5 px-2 py-0.5 rounded-lg border border-slate-200/80 bg-white hover:border-[#6eafe9] text-slate-700 text-[10px] sm:text-[11px] font-medium shadow-2xs transition-all cursor-pointer"
-              >
-                <span className="text-xs">{activeMood.emoji}</span>
-                <span>{activeMood.label}</span>
-                <ChevronDown className={`w-3 h-3 text-slate-400 transition-transform ${isMoodPickerOpen ? 'rotate-180' : ''}`} />
-              </button>
-
-              {isMoodPickerOpen && (
-                <div className="absolute top-full mt-1 right-0 z-50 bg-white rounded-2xl shadow-xl border border-slate-100 p-1.5 w-52 max-h-[220px] overflow-y-auto animate-in fade-in zoom-in-95 duration-150 grid grid-cols-2 gap-1">
-                  {moods.map((m) => {
-                    const isSelected = selectedMood === m.id
-                    return (
-                      <button
-                        key={m.id}
-                        type="button"
-                        onClick={() => {
-                          setSelectedMood(m.id)
-                          setIsMoodPickerOpen(false)
-                        }}
-                        className={`w-full flex items-center gap-1.5 px-2 py-1 rounded-lg text-[10px] sm:text-[11px] font-medium transition-colors cursor-pointer text-left ${
-                          isSelected
-                            ? 'bg-[#eff6fc] text-[#4f8ee6] font-semibold'
-                            : 'text-slate-600 hover:bg-slate-50'
-                        }`}
-                      >
-                        <span className="text-xs">{m.emoji}</span>
-                        <span className="truncate">{m.label}</span>
-                      </button>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-
-            <div className="flex-1 min-h-0 flex flex-col gap-2 pt-0.5 overflow-hidden">
-              <div className="flex flex-col min-h-[46px] flex-auto max-h-[65%] overflow-hidden">
-                <div className="flex items-center justify-between flex-shrink-0 pb-1">
-                  <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">
+            <div className="flex-1 min-h-0 flex flex-col gap-2 pt-1 overflow-hidden">
+              <div className="flex flex-col flex-shrink-0">
+                <div className="flex items-center justify-between pb-1 flex-shrink-0">
+                  <span className="text-[9.5px] sm:text-[10px] font-semibold text-slate-400 uppercase tracking-wider">
                     Today&apos;s Goals
                   </span>
                   {!isAddingGoal && (
                     <button
                       type="button"
                       onClick={() => setIsAddingGoal(true)}
-                      className="text-[10px] font-semibold text-[#4f8ee6] hover:text-[#3b79ce] flex items-center gap-0.5 cursor-pointer"
+                      className="text-[10px] sm:text-[11px] font-semibold text-[#4f8ee6] hover:text-[#3b79ce] flex items-center gap-0.5 cursor-pointer"
                     >
-                      <Plus className="w-2.5 h-2.5" />
+                      <Plus className="w-3 h-3" />
                       <span>Add</span>
                     </button>
                   )}
@@ -1228,27 +1232,27 @@ const photo = entryDate && photoState?.date === entryDate ? photoState : null
                   </div>
                 )}
 
-                <div className="space-y-1 overflow-y-auto pr-0.5 scrollbar-none flex-1 min-h-0 overscroll-contain">
+                <div className="space-y-1.5 overflow-y-auto pr-0.5 scrollbar-none max-h-[150px] sm:max-h-[170px] md:max-h-[185px] overscroll-contain">
                   {goals.length === 0 && !isAddingGoal && (
                     <button
                       type="button"
                       onClick={() => setIsAddingGoal(true)}
-                      className="w-full flex items-center justify-between gap-1.5 p-1 sm:p-1.5 rounded-md bg-white/70 border border-dashed border-slate-300 hover:border-[#6eafe9] hover:bg-[#eff6fc]/40 text-slate-400 hover:text-[#4f8ee6] transition-all cursor-pointer group/placeholder"
+                      className="w-full flex items-center justify-between gap-1.5 p-1.5 sm:p-2 rounded-lg bg-white/70 border border-dashed border-slate-300 hover:border-[#6eafe9] hover:bg-[#eff6fc]/40 text-slate-400 hover:text-[#4f8ee6] transition-all cursor-pointer group/placeholder"
                     >
                       <div className="flex items-center gap-1.5 min-w-0">
-                        <div className="w-3 h-3 rounded border border-dashed border-slate-300 group-hover/placeholder:border-[#6eafe9] flex items-center justify-center flex-shrink-0" />
-                        <span className="text-[10px] italic">
+                        <div className="w-3.5 h-3.5 rounded border border-dashed border-slate-300 group-hover/placeholder:border-[#6eafe9] flex items-center justify-center flex-shrink-0" />
+                        <span className="text-[10.5px] sm:text-[11px] italic">
                           Add todays goals here
                         </span>
                       </div>
-                      <Plus className="w-2.5 h-2.5 opacity-60 group-hover/placeholder:opacity-100" />
+                      <Plus className="w-3 h-3 opacity-60 group-hover/placeholder:opacity-100" />
                     </button>
                   )}
 
                   {goals.map((g) => (
                     <div
                       key={g.id}
-                      className="flex items-center justify-between gap-1.5 p-1 rounded-md bg-white border border-slate-200/50 hover:border-slate-300/80 transition-colors group/goal"
+                      className="flex items-center justify-between gap-1.5 p-1.5 sm:p-2 rounded-lg bg-white border border-slate-200/50 hover:border-slate-300/80 shadow-2xs transition-colors group/goal"
                     >
                       <button
                         type="button"
@@ -1256,16 +1260,16 @@ const photo = entryDate && photoState?.date === entryDate ? photoState : null
                         className="flex items-center gap-1.5 min-w-0 flex-1 text-left cursor-pointer"
                       >
                         <div
-                          className={`w-3 h-3 rounded border flex items-center justify-center transition-colors flex-shrink-0 ${
+                          className={`w-3.5 h-3.5 rounded border flex items-center justify-center transition-colors flex-shrink-0 ${
                             g.completed
                               ? 'bg-[#6eafe9] border-[#6eafe9] text-white'
                               : 'border-slate-300 bg-white'
                           }`}
                         >
-                          {g.completed && <Check className="w-2 h-2 stroke-[3]" />}
+                          {g.completed && <Check className="w-2.5 h-2.5 stroke-[3]" />}
                         </div>
                         <span
-                          className={`text-[10px] truncate transition-all ${
+                          className={`text-[10.5px] sm:text-[11px] truncate transition-all ${
                             g.completed
                               ? 'line-through text-slate-400'
                               : 'text-slate-700 font-medium'
@@ -1280,319 +1284,361 @@ const photo = entryDate && photoState?.date === entryDate ? photoState : null
                         className="opacity-0 group-hover/goal:opacity-100 text-slate-400 hover:text-rose-500 transition-opacity p-0.5 cursor-pointer"
                         title="Delete goal"
                       >
-                        <Trash2 className="w-2.5 h-2.5" />
+                        <Trash2 className="w-3 h-3" />
                       </button>
                     </div>
                   ))}
                 </div>
                 {goalError && (
-                  <p className="text-[10px] text-rose-600 pt-1 flex-shrink-0">
+                  <p className="text-[10px] text-rose-600 pt-0.5 flex-shrink-0">
                     Unable to save: {goalError}
                   </p>
                 )}
               </div>
 
-              <div className="flex flex-col min-h-[46px] flex-auto max-h-[65%] overflow-hidden pt-1.5 border-t border-slate-200/60">
-                <div className="flex items-center justify-between pb-1 flex-shrink-0">
-                  <div className="flex items-center gap-1.5">
-                    <Sparkles className="w-3 h-3 text-[#4f8ee6]" />
-                    <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider">
-                      DayBook Noticed
-                    </span>
-                  </div>
+              <div className="flex-1 min-h-0 flex flex-col pt-1.5 border-t border-slate-200/60 overflow-hidden">
+                <div className="flex items-center gap-1 p-0.5 bg-slate-200/50 rounded-lg flex-shrink-0 mb-1.5">
                   <button
                     type="button"
-                    onClick={() => {
-                      void generateObservations()
-                    }}
-                    disabled={isGenerating || !!isLoading || !journal}
-                    className="text-[9px] font-medium text-[#4f8ee6] hover:text-[#5b9fe0] disabled:opacity-50 transition-colors cursor-pointer"
+                    onClick={() => setAiInsightTab('noticed')}
+                    className={`flex-1 py-1 px-1.5 rounded-md text-[9.5px] sm:text-[10px] font-medium transition-all text-center flex items-center justify-center gap-1 cursor-pointer ${
+                      aiInsightTab === 'noticed'
+                        ? 'bg-white text-[#4f8ee6] font-semibold shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
                   >
-                    {isGenerating
-                      ? 'Noticing...'
-                      : observations.length > 0
-                        ? 'Notice again'
-                        : 'Notice this entry'}
+                    <Sparkles className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                    <span>Noticed</span>
+                    {observations.length > 0 && (
+                      <span className="text-[8px] sm:text-[8.5px] bg-[#eff6fc] text-[#4f8ee6] rounded-full px-1.5">
+                        {observations.length}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAiInsightTab('remembers')}
+                    className={`flex-1 py-1 px-1.5 rounded-md text-[9.5px] sm:text-[10px] font-medium transition-all text-center flex items-center justify-center gap-1 cursor-pointer ${
+                      aiInsightTab === 'remembers'
+                        ? 'bg-white text-[#4f8ee6] font-semibold shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    <Brain className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
+                    <span>Remembers</span>
+                    {(memories.length > 0 || memorySuggestions.length > 0) && (
+                      <span className="text-[8px] sm:text-[8.5px] bg-[#eff6fc] text-[#4f8ee6] rounded-full px-1.5">
+                        {memorySuggestions.length > 0 ? `+${memorySuggestions.length}` : memories.length}
+                      </span>
+                    )}
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setAiInsightTab('knowledge')}
+                    className={`flex-1 py-1 px-1.5 rounded-md text-[9.5px] sm:text-[10px] font-medium transition-all text-center flex items-center justify-center gap-1 cursor-pointer ${
+                      aiInsightTab === 'knowledge'
+                        ? 'bg-white text-[#4f8ee6] font-semibold shadow-2xs'
+                        : 'text-slate-500 hover:text-slate-700'
+                    }`}
+                  >
+                    <span>About You</span>
                   </button>
                 </div>
 
-                <div className="space-y-1 overflow-y-auto pr-0.5 scrollbar-none flex-1 min-h-0 overscroll-contain">
-                  {isGenerating && (
-                    <p className="text-[9px] text-slate-400 italic flex items-center gap-1.5 py-0.5">
-                      <Loader2 className="w-2.5 h-2.5 animate-spin text-[#4f8ee6]" />
-                      Reflecting on this entry...
-                    </p>
-                  )}
-                  {observations.length === 0 && !isGenerating && (
-                    <p className="text-[9px] text-slate-400 italic py-0.5">
-                      No observations yet for this entry.
-                    </p>
-                  )}
-                  {observations.map((observation) => (
-                    <div
-                      key={observation.id}
-                      className="p-1.5 sm:p-2 rounded-md bg-white border border-slate-200/60"
-                    >
-                      <div className="flex items-start gap-1.5">
-                        <span className="text-[8px] uppercase tracking-wider font-semibold text-[#4f8ee6] bg-[#eff6fc] rounded px-1 py-0.5 mt-0.5 flex-shrink-0">
-                          {observation.type}
-                        </span>
-                        <p className="text-[10px] text-slate-700 leading-snug">
-                          {observation.content}
-                        </p>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-
-                {observationError && (
-                  <p className="text-[9px] text-rose-600 pt-1 flex-shrink-0">
-                    Could not generate observations: {observationError}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void generateObservations()
-                      }}
-                      disabled={isGenerating}
-                      className="underline ml-1 cursor-pointer disabled:opacity-50"
-                    >
-                      Retry
-                    </button>
-                  </p>
-                )}
-              </div>
-
-              <div className="pt-1.5 flex-shrink-0 border-t border-slate-200/60">
-                <div className="flex items-center justify-between pb-1">
-                  <div className="flex items-center gap-1.5">
-                    <Brain className="w-3 h-3 text-[#4f8ee6]" />
-                    <span className="text-[9px] font-semibold text-slate-500 uppercase tracking-wider">
-                      DayBook Remembers
-                    </span>
-                    <span className="text-[9px] text-slate-400">{memories.length}</span>
-                    {(memories.length > 0 || memorySuggestions.length > 0) && (
+                {aiInsightTab === 'noticed' && (
+                  <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                    <div className="flex items-center justify-between pb-1 flex-shrink-0">
+                      <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">
+                        Per-Entry Insights
+                      </span>
                       <button
                         type="button"
-                        onClick={() => setIsMemoryPanelOpen((open) => !open)}
-                        className="text-[9px] text-slate-400 hover:text-[#4f8ee6] cursor-pointer"
+                        onClick={() => {
+                          void generateObservations()
+                        }}
+                        disabled={isGenerating || !!isLoading || !journal}
+                        className="text-[9px] font-medium text-[#4f8ee6] hover:text-[#5b9fe0] disabled:opacity-50 transition-colors cursor-pointer"
                       >
-                        {isMemoryPanelOpen ? 'Show less' : 'Show all'}
+                        {isGenerating
+                          ? 'Noticing...'
+                          : observations.length > 0
+                            ? 'Notice again'
+                            : 'Notice this entry'}
                       </button>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      void findPatterns()
-                    }}
-                    disabled={isSuggesting}
-                    className="text-[9px] font-medium text-[#4f8ee6] hover:text-[#5b9fe0] disabled:opacity-50 transition-colors cursor-pointer"
-                  >
-                    {isSuggesting ? 'Looking...' : 'Find patterns'}
-                  </button>
-                </div>
+                    </div>
 
-                {isSuggesting && (
-                  <p className="text-[9px] text-slate-400 italic flex items-center gap-1.5 pb-0.5">
-                    <Loader2 className="w-2.5 h-2.5 animate-spin text-[#4f8ee6]" />
-                    {MEMORY_STATUS_MESSAGES[memoryStatusIndex]}
-                  </p>
-                )}
+                    <div className="space-y-1.5 overflow-y-auto pr-0.5 scrollbar-none flex-1 min-h-0 overscroll-contain">
+                      {isGenerating && (
+                        <p className="text-[10px] text-slate-400 italic flex items-center gap-1.5 py-1">
+                          <Loader2 className="w-3 h-3 animate-spin text-[#4f8ee6]" />
+                          Reflecting on this entry...
+                        </p>
+                      )}
+                      {observations.length === 0 && !isGenerating && (
+                        <p className="text-[10px] text-slate-400 italic py-1">
+                          No observations yet for this entry.
+                        </p>
+                      )}
+                      {observations.map((observation) => (
+                        <div
+                          key={observation.id}
+                          className="p-2 sm:p-2.5 rounded-xl bg-white border border-slate-200/60 shadow-2xs"
+                        >
+                          <div className="flex items-start gap-1.5">
+                            <span className="text-[8.5px] uppercase tracking-wider font-semibold text-[#4f8ee6] bg-[#eff6fc] rounded px-1.5 py-0.5 mt-0.5 flex-shrink-0">
+                              {observation.type}
+                            </span>
+                            <p className="text-[10.5px] sm:text-[11px] text-slate-700 leading-snug">
+                              {observation.content}
+                            </p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
 
-                {memorySuggestions.length === 0 && memories.length === 0 && !isSuggesting && (
-                  <p className="text-[9px] text-slate-400 italic">Nothing saved yet.</p>
-                )}
-
-                <div
-                  className={`space-y-1 overflow-y-auto pr-0.5 scrollbar-none ${
-                    isMemoryPanelOpen ? 'max-h-[210px]' : 'max-h-[58px]'
-                  }`}
-                >
-                  {memorySuggestions.map((suggestion) => (
-                    <div
-                      key={suggestion.content}
-                      className="p-1.5 rounded-md bg-[#eff6fc]/70 border border-[#6eafe9]/25"
-                    >
-                      <p className="text-[10px] text-[#1a2b49] leading-snug">{suggestion.content}</p>
-                      <p className="text-[9px] text-slate-400 mt-0.5">
-                        Based on {suggestion.evidence.map((item) => item.date).join(' and ')}
-                      </p>
-                      <div className="flex items-center gap-2 mt-1 text-[9px]">
+                    {observationError && (
+                      <p className="text-[9px] text-rose-600 pt-1 flex-shrink-0">
+                        Could not generate observations: {observationError}
                         <button
                           type="button"
                           onClick={() => {
-                            void handleRememberSuggestion(suggestion)
+                            void generateObservations()
                           }}
-                          className="text-[#4f8ee6] font-semibold hover:underline cursor-pointer"
+                          disabled={isGenerating}
+                          className="underline ml-1 cursor-pointer disabled:opacity-50"
                         >
-                          Remember this
+                          Retry
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDismissSuggestion(suggestion)}
-                          className="text-slate-400 hover:underline cursor-pointer"
-                        >
-                          Not now
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-
-                  {memories.map((memory) => (
-                    <div key={memory.id} className="p-1.5 rounded-md bg-white border border-slate-200/60">
-                      {editingMemoryId === memory.id ? (
-                        <div className="flex items-center gap-1.5">
-                          <input
-                            value={memoryDraft}
-                            onChange={(e) => setMemoryDraft(e.target.value)}
-                            className="flex-1 min-w-0 text-[10px] px-1.5 py-0.5 rounded bg-white border border-[#6eafe9] text-slate-700 focus:outline-none"
-                          />
-                          <button
-                            type="button"
-                            onClick={() => {
-                              void handleSaveMemoryEdit(memory.id)
-                            }}
-                            className="text-[9px] font-semibold text-[#4f8ee6] cursor-pointer"
-                          >
-                            Save
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => setEditingMemoryId(null)}
-                            className="text-[9px] text-slate-400 cursor-pointer"
-                          >
-                            Cancel
-                          </button>
-                        </div>
-                      ) : (
-                        <>
-                          <p className="text-[10px] text-[#1a2b49] leading-snug">{memory.content}</p>
-                          <div className="flex items-center justify-between mt-0.5">
-                            <span className="text-[8px] uppercase tracking-wider font-semibold text-slate-400">
-                              {memory.type}
-                            </span>
-                            <div className="flex items-center gap-2 text-[9px]">
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  setEditingMemoryId(memory.id)
-                                  setMemoryDraft(memory.content)
-                                }}
-                                className="text-slate-400 hover:text-[#4f8ee6] cursor-pointer"
-                              >
-                                Edit
-                              </button>
-                              <button
-                                type="button"
-                                onClick={() => {
-                                  void handleArchiveMemory(memory.id)
-                                }}
-                                className="text-slate-400 hover:text-rose-500 cursor-pointer"
-                              >
-                                Archive
-                              </button>
-                            </div>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ))}
-                </div>
-
-                {memoryError && (
-                  <p className="text-[9px] text-rose-600 pt-1">
-                    {memoryError}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void findPatterns()
-                      }}
-                      disabled={isSuggesting}
-                      className="underline ml-1 cursor-pointer disabled:opacity-50"
-                    >
-                      Retry
-                    </button>
-                  </p>
+                      </p>
+                    )}
+                  </div>
                 )}
 
-                {knowledge !== null && (
-                  <div className="pt-1.5">
-                    <button
-                      type="button"
-                      onClick={() => setIsKnowledgeOpen((open) => !open)}
-                      className="text-[9px] text-slate-400 hover:text-[#4f8ee6] cursor-pointer"
-                    >
-                      {isKnowledgeOpen ? 'Hide what DayBook knows' : 'What DayBook knows about you'}
-                    </button>
+                {aiInsightTab === 'remembers' && (
+                  <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                    <div className="flex items-center justify-between pb-1 flex-shrink-0">
+                      <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">
+                        Long-Term Patterns
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          void findPatterns()
+                        }}
+                        disabled={isSuggesting}
+                        className="text-[9px] font-medium text-[#4f8ee6] hover:text-[#5b9fe0] disabled:opacity-50 transition-colors cursor-pointer"
+                      >
+                        {isSuggesting ? 'Looking...' : 'Find patterns'}
+                      </button>
+                    </div>
 
-                    {isKnowledgeOpen && (
-                      <div className="mt-1 space-y-1.5 max-h-[150px] overflow-y-auto pr-0.5 scrollbar-none">
-                        <div className="p-1.5 rounded-md bg-white border border-slate-200/60">
-                          <p className="text-[9px] font-semibold uppercase tracking-wider text-[#1a2b49]">
-                            You told DayBook
+                    {isSuggesting && (
+                      <p className="text-[9px] text-slate-400 italic flex items-center gap-1.5 pb-0.5 flex-shrink-0">
+                        <Loader2 className="w-2.5 h-2.5 animate-spin text-[#4f8ee6]" />
+                        {MEMORY_STATUS_MESSAGES[memoryStatusIndex]}
+                      </p>
+                    )}
+
+                    <div className="space-y-1.5 overflow-y-auto pr-0.5 scrollbar-none flex-1 min-h-0 overscroll-contain">
+                      {memorySuggestions.length === 0 && memories.length === 0 && !isSuggesting && (
+                        <p className="text-[10px] text-slate-400 italic py-1">
+                          Nothing saved yet. DayBook will suggest patterns as you write.
+                        </p>
+                      )}
+
+                      {memorySuggestions.map((suggestion) => (
+                        <div
+                          key={suggestion.content}
+                          className="p-2 sm:p-2.5 rounded-xl bg-[#eff6fc]/70 border border-[#6eafe9]/25 shadow-2xs"
+                        >
+                          <p className="text-[10.5px] sm:text-[11px] text-[#1a2b49] leading-snug">{suggestion.content}</p>
+                          <p className="text-[9.5px] text-slate-400 mt-0.5">
+                            Based on {suggestion.evidence.map((item) => item.date).join(' and ')}
                           </p>
-                          <ul className="mt-0.5 space-y-0.5 text-[10px] text-slate-600">
-                            {knowledge.profileFacts.length === 0 && (
-                              <li className="text-slate-400">No profile details yet.</li>
-                            )}
-                            {knowledge.profileFacts.map((fact) => (
-                              <li key={fact}>{fact}</li>
-                            ))}
-                          </ul>
+                          <div className="flex items-center gap-2 mt-1 text-[9.5px]">
+                            <button
+                              type="button"
+                              onClick={() => {
+                                void handleRememberSuggestion(suggestion)
+                              }}
+                              className="text-[#4f8ee6] font-semibold hover:underline cursor-pointer"
+                            >
+                              Remember this
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => handleDismissSuggestion(suggestion)}
+                              className="text-slate-400 hover:underline cursor-pointer"
+                            >
+                              Not now
+                            </button>
+                          </div>
                         </div>
+                      ))}
 
-                        <div className="p-1.5 rounded-md bg-white border border-slate-200/60">
-                          <p className="text-[9px] font-semibold uppercase tracking-wider text-[#1a2b49]">
-                            DayBook remembers
-                          </p>
-                          <ul className="mt-0.5 space-y-0.5 text-[10px] text-slate-600">
-                            {knowledge.memories.length === 0 && (
-                              <li className="text-slate-400">No confirmed memories yet.</li>
-                            )}
-                            {knowledge.memories.map((memory) => (
-                              <li key={memory.content}>{memory.content}</li>
-                            ))}
-                          </ul>
+                      {memories.map((memory) => (
+                        <div key={memory.id} className="p-2 sm:p-2.5 rounded-xl bg-white border border-slate-200/60 shadow-2xs">
+                          {editingMemoryId === memory.id ? (
+                            <div className="flex items-center gap-1.5">
+                              <input
+                                value={memoryDraft}
+                                onChange={(e) => setMemoryDraft(e.target.value)}
+                                className="flex-1 min-w-0 text-[10.5px] px-1.5 py-0.5 rounded bg-white border border-[#6eafe9] text-slate-700 focus:outline-none"
+                              />
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  void handleSaveMemoryEdit(memory.id)
+                                }}
+                                className="text-[9.5px] font-semibold text-[#4f8ee6] cursor-pointer"
+                              >
+                                Save
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setEditingMemoryId(null)}
+                                className="text-[9.5px] text-slate-400 cursor-pointer"
+                              >
+                                Cancel
+                              </button>
+                            </div>
+                          ) : (
+                            <>
+                              <p className="text-[10.5px] sm:text-[11px] text-[#1a2b49] leading-snug">{memory.content}</p>
+                              <div className="flex items-center justify-between mt-1">
+                                <span className="text-[8.5px] uppercase tracking-wider font-semibold text-slate-400">
+                                  {memory.type}
+                                </span>
+                                <div className="flex items-center gap-2 text-[9.5px]">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingMemoryId(memory.id)
+                                      setMemoryDraft(memory.content)
+                                    }}
+                                    className="text-slate-400 hover:text-[#4f8ee6] cursor-pointer"
+                                  >
+                                    Edit
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      void handleArchiveMemory(memory.id)
+                                    }}
+                                    className="text-slate-400 hover:text-rose-500 cursor-pointer"
+                                  >
+                                    Archive
+                                  </button>
+                                </div>
+                              </div>
+                            </>
+                          )}
                         </div>
+                      ))}
+                    </div>
 
-                        <div className="p-1.5 rounded-md bg-white border border-slate-200/60">
-                          <p className="text-[9px] font-semibold uppercase tracking-wider text-[#1a2b49]">
-                            DayBook noticed
-                          </p>
-                          <ul className="mt-0.5 space-y-0.5 text-[10px] text-slate-600">
-                            {knowledge.observations.length === 0 && (
-                              <li className="text-slate-400">No observations yet.</li>
-                            )}
-                            {knowledge.observations.map((observation) => (
-                              <li key={`${observation.date}-${observation.content}`}>
-                                <span className="text-slate-400">{observation.date}</span>{' '}
-                                {observation.content}
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
+                    {memoryError && (
+                      <p className="text-[9px] text-rose-600 pt-1 flex-shrink-0">
+                        {memoryError}
+                        <button
+                          type="button"
+                          onClick={() => {
+                            void findPatterns()
+                          }}
+                          disabled={isSuggesting}
+                          className="underline ml-1 cursor-pointer disabled:opacity-50"
+                        >
+                          Retry
+                        </button>
+                      </p>
+                    )}
+                  </div>
+                )}
 
-                        {knowledge.stillLearning.length > 0 && (
-                          <div className="p-1.5 rounded-md bg-white border border-slate-200/60">
-                            <p className="text-[9px] font-semibold uppercase tracking-wider text-slate-400">
-                              Still learning
+                {aiInsightTab === 'knowledge' && (
+                  <div className="flex-1 min-h-0 flex flex-col overflow-hidden">
+                    <div className="flex items-center justify-between pb-1 flex-shrink-0">
+                      <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider">
+                        Learned Context
+                      </span>
+                    </div>
+
+                    <div className="space-y-2 overflow-y-auto pr-0.5 scrollbar-none flex-1 min-h-0 overscroll-contain">
+                      {knowledge === null ? (
+                        <p className="text-[10px] text-slate-400 italic py-1">
+                          No profile context available.
+                        </p>
+                      ) : (
+                        <>
+                          <div className="p-2 sm:p-2.5 rounded-xl bg-white border border-slate-200/60 shadow-2xs">
+                            <p className="text-[9.5px] font-semibold uppercase tracking-wider text-[#1a2b49]">
+                              You told DayBook
                             </p>
-                            <ul className="mt-0.5 space-y-0.5 text-[10px] text-slate-500">
-                              {knowledge.stillLearning.map((item) => (
-                                <li key={item}>{item}</li>
+                            <ul className="mt-1 space-y-0.5 text-[10.5px] text-slate-600">
+                              {knowledge.profileFacts.length === 0 && (
+                                <li className="text-slate-400 italic">No profile details yet.</li>
+                              )}
+                              {knowledge.profileFacts.map((fact) => (
+                                <li key={fact}>{fact}</li>
                               ))}
                             </ul>
                           </div>
-                        )}
-                      </div>
-                    )}
+
+                          <div className="p-2 sm:p-2.5 rounded-xl bg-white border border-slate-200/60 shadow-2xs">
+                            <p className="text-[9.5px] font-semibold uppercase tracking-wider text-[#1a2b49]">
+                              DayBook remembers
+                            </p>
+                            <ul className="mt-1 space-y-0.5 text-[10.5px] text-slate-600">
+                              {knowledge.memories.length === 0 && (
+                                <li className="text-slate-400 italic">No confirmed memories yet.</li>
+                              )}
+                              {knowledge.memories.map((memory) => (
+                                <li key={memory.content}>{memory.content}</li>
+                              ))}
+                            </ul>
+                          </div>
+
+                          <div className="p-2 sm:p-2.5 rounded-xl bg-white border border-slate-200/60 shadow-2xs">
+                            <p className="text-[9.5px] font-semibold uppercase tracking-wider text-[#1a2b49]">
+                              DayBook noticed
+                            </p>
+                            <ul className="mt-1 space-y-0.5 text-[10.5px] text-slate-600">
+                              {knowledge.observations.length === 0 && (
+                                <li className="text-slate-400 italic">No observations yet.</li>
+                              )}
+                              {knowledge.observations.map((observation) => (
+                                <li key={`${observation.date}-${observation.content}`}>
+                                  <span className="text-slate-400">{observation.date}</span>{' '}
+                                  {observation.content}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+
+                          {knowledge.stillLearning.length > 0 && (
+                            <div className="p-2 sm:p-2.5 rounded-xl bg-white border border-slate-200/60 shadow-2xs">
+                              <p className="text-[9.5px] font-semibold uppercase tracking-wider text-slate-400">
+                                Still learning
+                              </p>
+                              <ul className="mt-1 space-y-0.5 text-[10.5px] text-slate-500">
+                                {knowledge.stillLearning.map((item) => (
+                                  <li key={item}>{item}</li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+                        </>
+                      )}
+                    </div>
                   </div>
                 )}
               </div>
             </div>
           </div>
 
-          <div className="pt-1.5 border-t border-slate-200/60 flex items-center justify-center gap-1.5 text-center flex-shrink-0">
+          <div className="pt-2 sm:pt-2.5 border-t border-slate-200/60 flex items-center justify-center gap-1.5 text-center flex-shrink-0">
             <div className="w-4 h-4 rounded-full bg-amber-500/15 flex items-center justify-center text-amber-500">
               <Flame className="w-2.5 h-2.5 fill-amber-500" />
             </div>

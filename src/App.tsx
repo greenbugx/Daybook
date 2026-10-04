@@ -8,6 +8,8 @@ import {
   Settings as SettingsIcon
 } from 'lucide-react'
 import logo from './assets/images/logo-nobg.webp'
+import flowerImg from './assets/images/flower.webp'
+import leafImg from './assets/images/leaf.webp'
 import { InteractiveBook } from './components/InteractiveBook'
 import { AboutPage } from './components/AboutPage'
 import { AnalyticsAIView, type AnalyticsMessage } from './components/AnalyticsAIView'
@@ -209,7 +211,15 @@ interface StreakState {
 }
 
 function App() {
-  const [activePage, setActivePage] = useState<NavItem>('Home')
+  const [activePage, setActivePage] = useState<NavItem>(() => {
+    if (typeof window !== 'undefined') {
+      const page = new URLSearchParams(window.location.search).get('page')
+      if (page === 'About' || page === 'Journal' || page === 'Home') {
+        return page
+      }
+    }
+    return 'Home'
+  })
   const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab>('Book')
   const [pendingSidebarTab, setPendingSidebarTab] = useState<SidebarTab | null>(null)
   const [isClosingBook, setIsClosingBook] = useState(false)
@@ -798,14 +808,14 @@ function App() {
         </div>
       </header>
 
-      <main className={`flex-1 flex flex-col px-6 sm:px-12 md:px-16 lg:px-20 overflow-x-hidden ${
+      <main className={`flex-1 flex flex-col px-6 sm:px-12 md:px-16 lg:px-20 ${
         activePage === 'About'
-          ? 'justify-start py-6 sm:py-10 md:py-14'
+          ? 'justify-start py-6 sm:py-10 md:py-14 overflow-x-hidden'
           : activePage === 'Journal' && activeSidebarTab === 'Book'
-            ? 'justify-center py-2 sm:py-3 lg:py-4'
+            ? 'justify-center py-2 sm:py-3 lg:py-4 overflow-x-hidden'
             : activePage === 'Home'
-              ? 'justify-center py-2 sm:py-3 lg:py-4'
-              : 'justify-center py-4 sm:py-6 md:py-8'
+              ? 'justify-center py-2 sm:py-3 lg:py-4 overflow-visible'
+              : 'justify-center py-4 sm:py-6 md:py-8 overflow-x-hidden'
       }`}>
         {activePage === 'About' ? (
           <AboutPage onStartWriting={handleOpenJournal} />
@@ -817,7 +827,7 @@ function App() {
                   ? activeSidebarTab === 'Book' || isClosingBook
                     ? 'w-full lg:w-22 flex-shrink-0 -translate-y-3 sm:-translate-y-5 lg:-translate-y-7'
                     : 'w-full lg:w-[56%] flex-shrink-0 -translate-y-3 sm:-translate-y-5 lg:-translate-y-7'
-                  : 'w-full lg:w-[32%] translate-y-0'
+                  : 'w-full lg:flex-1 min-w-0 -translate-y-3 sm:-translate-y-5 lg:-translate-y-7'
               }`}
             >
               <div
@@ -831,13 +841,16 @@ function App() {
                         : 'opacity-0 -translate-x-6 absolute top-0 left-0 h-0 max-h-0 overflow-hidden pointer-events-none transition-none'
                 }`}
               >
-                <div className="flex items-center gap-5 sm:gap-6 mb-8 sm:mb-10 pt-10 sm:pt-14 lg:pt-20">
+                <div className="flex items-center gap-4 sm:gap-5 mb-8 sm:mb-10 pt-10 sm:pt-14 lg:pt-20 max-w-full">
                   {renderTimeIcon(timeInfo.phase)}
-                  <div className="flex flex-col">
-                    <span className="text-slate-500 text-xl sm:text-2xl md:text-3xl font-medium">
+                  <div className="flex flex-col min-w-0">
+                    <span className="text-slate-500 text-lg sm:text-xl md:text-2xl font-medium truncate">
                       {timeInfo.greeting}
                     </span>
-                    <span className="text-4xl sm:text-5xl md:text-6xl font-extrabold tracking-tight text-[#1a2b49]">
+                    <span
+                      className="text-2xl sm:text-3xl lg:text-3xl xl:text-4xl font-extrabold tracking-tight text-[#1a2b49] whitespace-nowrap block"
+                      title={currentUser?.displayName || 'User'}
+                    >
                       {currentUser?.displayName || 'User'}
                     </span>
                   </div>
@@ -853,6 +866,19 @@ function App() {
                   <span className="inline-block text-5xl sm:text-6xl md:text-7xl font-serif text-[#6eafe9]/70 select-none ml-2 align-middle">
                     &rdquo;
                   </span>
+
+                  <div className="flex items-center gap-2 mt-3 pl-1 pointer-events-none select-none opacity-85">
+                    <img
+                      src={flowerImg}
+                      alt=""
+                      className="w-5 sm:w-6 h-auto object-contain rotate-[-12deg] drop-shadow-sm"
+                    />
+                    <img
+                      src={leafImg}
+                      alt=""
+                      className="w-4.5 sm:w-5.5 h-auto object-contain rotate-[38deg] drop-shadow-sm opacity-90"
+                    />
+                  </div>
                 </div>
               </div>
 
@@ -951,12 +977,12 @@ function App() {
             </div>
 
             <div
-              className={`transition-all duration-700 ease-in-out flex flex-col items-center justify-start z-10 -translate-y-4 sm:-translate-y-6 lg:-translate-y-8 py-2 ${
+              className={`transition-all duration-700 ease-in-out flex flex-col items-center justify-start z-10 ${
                 activePage === 'Journal'
                   ? activeSidebarTab === 'Book' || isClosingBook
-                    ? 'w-full lg:flex-1 flex justify-center'
-                    : 'w-full lg:w-[41%] flex-shrink-0 flex justify-center'
-                  : 'w-full lg:w-[36%] flex-shrink-0 flex justify-center'
+                    ? 'w-full lg:flex-1 flex justify-center -translate-y-4 sm:-translate-y-6 lg:-translate-y-8 py-2'
+                    : 'w-full lg:w-[41%] flex-shrink-0 flex justify-center -translate-y-4 sm:-translate-y-6 lg:-translate-y-8 py-2'
+                  : 'w-full lg:w-auto flex-shrink-0 flex justify-center -translate-y-4 sm:-translate-y-6 lg:-translate-y-8 py-2'
               }`}
             >
               <InteractiveBook
@@ -989,7 +1015,7 @@ function App() {
                     : isClosingBook
                       ? 'w-0 lg:w-22 h-0 max-h-0 opacity-0 pointer-events-none overflow-hidden p-0 m-0 flex-shrink-0'
                       : 'w-0 h-0 max-h-0 opacity-0 pointer-events-none overflow-hidden p-0 m-0'
-                  : 'w-full lg:w-[32%] pointer-events-auto lg:pl-6 translate-y-0'
+                  : 'w-full lg:flex-1 min-w-0 pointer-events-auto lg:pl-6 -translate-y-3 sm:-translate-y-5 lg:-translate-y-7'
               }`}
             >
               <div
@@ -1003,9 +1029,16 @@ function App() {
                         : 'opacity-0 translate-x-6 absolute top-0 left-0 h-0 max-h-0 overflow-hidden pointer-events-none transition-none'
                 }`}
               >
-                <span className="text-sm sm:text-base font-medium text-slate-400 mb-2">
-                  {formattedDate}
-                </span>
+                <div className="flex items-center gap-1.5 mb-2 pointer-events-none select-none">
+                  <img
+                    src={leafImg}
+                    alt=""
+                    className="w-4 sm:w-5 h-auto object-contain rotate-[55deg] drop-shadow-sm opacity-80"
+                  />
+                  <span className="text-sm sm:text-base font-medium text-slate-400">
+                    {formattedDate}
+                  </span>
+                </div>
                 <h2 className="text-3xl sm:text-4xl font-bold tracking-tight text-[#1a2b49] mb-3">
                   Ready to write today&apos;s chapter?
                 </h2>
