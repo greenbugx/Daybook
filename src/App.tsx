@@ -234,6 +234,7 @@ function App() {
     return defaultTextStyle
   })
   const [selectedJournalDate, setSelectedJournalDate] = useState<string>(() => toDateKey(new Date()))
+  const [goalsDate] = useState<string>(() => toDateKey(new Date()))
   const [analyticsMessages, setAnalyticsMessages] = useState<AnalyticsMessage[]>([])
   const [journalState, setJournalState] = useState<JournalState>(INITIAL_JOURNAL_STATE)
   const [journalDatesState, setJournalDatesState] = useState<JournalDatesState | null>(null)
@@ -932,7 +933,7 @@ function App() {
                       )}
 
                       {activeSidebarTab === 'Goals' && (
-                        <GoalsView selectedJournalDate={selectedJournalDate} />
+                        <GoalsView selectedJournalDate={goalsDate} />
                       )}
 
                       {activeSidebarTab === 'Library' && (
