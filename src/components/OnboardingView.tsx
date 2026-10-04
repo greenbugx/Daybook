@@ -3,6 +3,7 @@ import { ArrowRight, ArrowLeft, BookOpen, Check } from 'lucide-react'
 import logo from '../assets/images/logo-nobg.webp'
 import sceneImg from '../assets/images/scene.webp'
 import { updateCurrentProfile, type UpdateUserProfileInput, type UserProfile } from '../lib/api'
+import { UiDemoBadge } from './UiDemoBadge'
 
 interface OnboardingViewProps {
   initialProfile?: UserProfile | null
@@ -167,7 +168,7 @@ export function OnboardingView({ initialProfile, onComplete, onCancel }: Onboard
     <div className="min-h-screen bg-[#FAF9F5] text-[#464e5c] flex flex-col justify-between px-6 sm:px-12 md:px-16 lg:px-24 py-8 sm:py-10">
       <div className="w-full max-w-5xl mx-auto flex-1 flex flex-col">
         <header className="flex items-center justify-between pb-6 sm:pb-8 border-b border-slate-200/60 mb-8 sm:mb-12">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2.5 sm:gap-3">
             <img
               src={logo}
               alt="DayBook logo"
@@ -179,6 +180,7 @@ export function OnboardingView({ initialProfile, onComplete, onCancel }: Onboard
               <span className="text-[#464e5c]">Day</span>
               <span className="text-[#6eafe9]">Book</span>
             </span>
+            <UiDemoBadge />
           </div>
 
           {onCancel && (

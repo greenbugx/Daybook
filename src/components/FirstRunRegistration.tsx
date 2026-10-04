@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import logo from '../assets/images/logo-nobg.webp'
 import { createUser, type LocalUser } from '../lib/api'
+import { UiDemoBadge } from './UiDemoBadge'
 
 interface FirstRunRegistrationProps {
   onCreated: (user: LocalUser) => void
@@ -45,10 +46,13 @@ export function FirstRunRegistration({ onCreated, onCancel }: FirstRunRegistrati
           className="h-20 w-auto object-contain select-none mb-4"
         />
 
-        <span className="text-3xl sm:text-4xl font-bold tracking-tight select-none mb-8">
-          <span className="text-[#464e5c]">Day</span>
-          <span className="text-[#6eafe9]">Book</span>
-        </span>
+        <div className="inline-flex items-center gap-2.5 select-none mb-8">
+          <span className="text-3xl sm:text-4xl font-bold tracking-tight">
+            <span className="text-[#464e5c]">Day</span>
+            <span className="text-[#6eafe9]">Book</span>
+          </span>
+          <UiDemoBadge />
+        </div>
 
         <h1 className="text-4xl sm:text-5xl text-[#1a2b49] tracking-wide leading-tight mb-3">
           Welcome to DayBook

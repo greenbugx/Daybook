@@ -21,6 +21,7 @@ import { JournalToolbar } from './components/JournalToolbar'
 import { defaultTextStyle, type JournalTextStyle } from './components/journalTextStyle'
 import { FirstRunRegistration } from './components/FirstRunRegistration'
 import { OnboardingView } from './components/OnboardingView'
+import { UiDemoBadge } from './components/UiDemoBadge'
 import {
   getCurrentUser,
   getCurrentProfile,
@@ -703,27 +704,30 @@ function App() {
           : 'min-h-screen'
     }`}>
       <header className="relative px-4 py-3 sm:px-8 sm:py-6 flex flex-wrap sm:flex-nowrap items-center justify-between gap-y-2 sm:gap-y-4 flex-shrink-0">
-        <a
-          href="/"
-          onClick={(e) => {
-            e.preventDefault()
-            handleNavigatePage('Home')
-          }}
-          className="self-start sm:self-auto inline-flex items-center gap-1.5 sm:gap-2 transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6eafe9] rounded-lg"
-        >
-          <img
-            src={logo}
-            alt="DayBook logo"
-            width={64}
-            height={52}
-            fetchPriority="high"
-            className="h-10 sm:h-16 w-auto object-contain select-none"
-          />
-          <span className="text-2xl sm:text-4xl font-bold tracking-tight select-none">
-            <span className="text-[#464e5c]">Day</span>
-            <span className="text-[#6eafe9]">Book</span>
-          </span>
-        </a>
+        <div className="self-start sm:self-auto inline-flex items-center gap-2 sm:gap-3">
+          <a
+            href="/"
+            onClick={(e) => {
+              e.preventDefault()
+              handleNavigatePage('Home')
+            }}
+            className="inline-flex items-center gap-1.5 sm:gap-2 transition-opacity hover:opacity-90 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#6eafe9] rounded-lg"
+          >
+            <img
+              src={logo}
+              alt="DayBook logo"
+              width={64}
+              height={52}
+              fetchPriority="high"
+              className="h-10 sm:h-16 w-auto object-contain select-none"
+            />
+            <span className="text-2xl sm:text-4xl font-bold tracking-tight select-none">
+              <span className="text-[#464e5c]">Day</span>
+              <span className="text-[#6eafe9]">Book</span>
+            </span>
+          </a>
+          <UiDemoBadge />
+        </div>
 
         <nav className="order-3 sm:order-2 w-full sm:w-auto flex justify-center items-center gap-6 sm:gap-8 text-sm sm:text-base sm:absolute sm:left-1/2 sm:-translate-x-1/2">
           {navItems.map((item) => {
@@ -795,6 +799,9 @@ function App() {
                   <h3 className="font-bold text-slate-800 text-sm truncate">
                     {currentUser?.displayName || 'User'}
                   </h3>
+                  <div className="mt-1">
+                    <UiDemoBadge showExplanation={false} />
+                  </div>
                 </div>
               </div>
 

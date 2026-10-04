@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { Cpu, Check, RefreshCw, ShieldCheck } from 'lucide-react'
+import { UiDemoBadge } from './UiDemoBadge'
 
 export interface ModelOption {
   id: string
@@ -252,11 +253,14 @@ export function SettingsView({
         </div>
       </div>
 
-      <div className="pt-2 border-t border-slate-100 flex items-center gap-2 text-[11px] text-slate-400">
-        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
-        <span>
-          Private inference via Ollama. Journal entries never leave your device.
-        </span>
+      <div className="pt-2.5 border-t border-slate-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-[11px] text-slate-400">
+        <div className="flex items-center gap-2">
+          <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+          <span>
+            Private inference via Ollama. Journal entries never leave your device.
+          </span>
+        </div>
+        <UiDemoBadge showExplanation={false} />
       </div>
     </div>
   )
