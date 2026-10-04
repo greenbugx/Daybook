@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react'
+import { useState, useRef, useEffect, type Dispatch, type SetStateAction } from 'react'
 import { ArrowUp, Loader2, RotateCcw, Bot } from 'lucide-react'
 import { queryAI, type AiQueryResponse, type ReflectionIntent } from '../lib/api'
 
@@ -9,6 +9,8 @@ interface Message {
   query?: AiQueryResponse
   isError?: boolean
 }
+
+export type AnalyticsMessage = Message
 
 const suggestions = [
   'What patterns do you notice in my thoughts?',
@@ -29,26 +31,30 @@ const INTENT_LABELS: Record<ReflectionIntent, string> = {
   GENERAL_REFLECTION: 'Reflection',
 }
 
-export function AnalyticsAIView({ selectedJournalDate }: { selectedJournalDate?: string }) {
+let messageCounter = 0
+
+function nextMessageId() {
+  messageCounter += 1
+  return String(messageCounter)
+}
+
+interface AnalyticsAIViewProps {
+  selectedJournalDate?: string
+  messages: Message[]
+  onMessagesChange: Dispatch<SetStateAction<Message[]>>
+}
+
+export function AnalyticsAIView({
+  selectedJournalDate,
+  messages,
+  onMessagesChange: setMessages,
+}: AnalyticsAIViewProps) {
   const [prompt, setPrompt] = useState('')
-  const [messages, setMessages] = useState<Message[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
-  const idCounterRef = useRef(0)
   const abortRef = useRef<AbortController | null>(null)
   const requestIdRef = useRef(0)
-
-  function nextId() {
-    idCounterRef.current += 1
-    return String(idCounterRef.current)
-  }
-
-  useEffect(() => {
-    return () => {
-      abortRef.current?.abort()
-    }
-  }, [])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -59,7 +65,7 @@ export function AnalyticsAIView({ selectedJournalDate }: { selectedJournalDate?:
     if (!text || isLoading) return
 
     const userMessage: Message = {
-      id: nextId(),
+      id: nextMessageId(),
       role: 'user',
       content: text,
     }
@@ -77,7 +83,7 @@ export function AnalyticsAIView({ selectedJournalDate }: { selectedJournalDate?:
       const result = await queryAI(text, selectedJournalDate, controller.signal)
       if (requestId !== requestIdRef.current) return
       const assistantMessage: Message = {
-        id: nextId(),
+        id: nextMessageId(),
         role: 'assistant',
         content: result.displayText,
         query: result,
@@ -86,7 +92,7 @@ export function AnalyticsAIView({ selectedJournalDate }: { selectedJournalDate?:
     } catch (err) {
       if (requestId !== requestIdRef.current || controller.signal.aborted) return
       const assistantMessage: Message = {
-        id: nextId(),
+        id: nextMessageId(),
         role: 'assistant',
         content: err instanceof Error ? err.message : 'DayBook could not answer that.',
         isError: true,

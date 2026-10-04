@@ -488,3 +488,43 @@ export async function updateMemory(
   return data.memory
 }
 
+export interface JournalMedia {
+  id: string
+  mediaType: string
+  url: string
+  createdAt: string
+}
+
+export async function getJournalMedia(
+  entryDate: string,
+  signal?: AbortSignal,
+): Promise<JournalMedia[]> {
+  const data = await request<{ media: JournalMedia[] }>(
+    `/api/journals/${encodeURIComponent(entryDate)}/media`,
+    { signal },
+  )
+  return data.media
+}
+
+export async function saveJournalMedia(entryDate: string, dataUrl: string): Promise<JournalMedia> {
+  const data = await request<{ media: JournalMedia }>(
+    `/api/journals/${encodeURIComponent(entryDate)}/media`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ dataUrl }),
+    },
+  )
+  return data.media
+}
+
+export async function deleteJournalMedia(
+  entryDate: string,
+  mediaId: string,
+): Promise<{ deleted: boolean }> {
+  return request<{ deleted: boolean }>(
+    `/api/journals/${encodeURIComponent(entryDate)}/media/${encodeURIComponent(mediaId)}`,
+    { method: 'DELETE' },
+  )
+}
+

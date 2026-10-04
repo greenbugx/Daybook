@@ -1,10 +1,12 @@
 import { randomUUID } from "node:crypto";
+import { existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
+import { dirname, join, resolve, sep } from "node:path";
 import Fastify from "fastify";
 import { and, eq, gte, inArray, lte, lt, asc, desc, sql } from "drizzle-orm";
 import { z } from "zod";
 import { Ollama } from "ollama";
-import { db } from "./db/client.js";
-import { appSettings, journalEntries, journalGoals, journalObservations, localSessions, memories, quotes, savedQuotes, userProfiles, users } from "./db/schema.js";
+import { dataDir, db } from "./db/client.js";
+import { appSettings, journalEntries, journalGoals, journalMedia, journalObservations, localSessions, memories, quotes, savedQuotes, userProfiles, users } from "./db/schema.js";
 
 const PORT = Number(process.env.PORT ?? 3001);
 
@@ -12,6 +14,58 @@ const app = Fastify({ logger: false });
 
 function nowIso(): string {
   return new Date().toISOString();
+}
+
+const MEDIA_MAX_BYTES = 5 * 1024 * 1024;
+const MEDIA_MAX_BODY_BYTES = 8 * 1024 * 1024;
+
+const MEDIA_MIME_EXTENSIONS: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+};
+
+const MEDIA_CONTENT_TYPES: Record<string, string> = {
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+};
+
+function mediaRoot(): string {
+  return resolve(dataDir, "media");
+}
+
+function resolveMediaPath(relativePath: string): string | null {
+  const root = mediaRoot();
+  const target = resolve(root, relativePath);
+  if (target !== root && !target.startsWith(root + sep)) return null;
+  return target;
+}
+
+function removeMediaFile(relativePath: string): void {
+  const target = resolveMediaPath(relativePath);
+  if (target === null) return;
+
+  try {
+    if (existsSync(target)) unlinkSync(target);
+    const root = mediaRoot();
+    const dir = dirname(target);
+    if (dir !== root && dir.startsWith(root + sep) && existsSync(dir) && readdirSync(dir).length === 0) {
+      rmdirSync(dir);
+    }
+  } catch {
+    return;
+  }
+}
+
+function toMediaResponse(row: typeof journalMedia.$inferSelect, entryDate: string) {
+  return {
+    id: row.id,
+    mediaType: row.mediaType,
+    url: `/api/journals/${entryDate}/media/${row.id}`,
+    createdAt: row.createdAt,
+  };
 }
 
 function toUserResponse(user: typeof users.$inferSelect) {
@@ -547,7 +601,18 @@ app.delete("/api/journals/:date", async (request, reply) => {
     return reply.send({ deleted: false });
   }
 
+  const mediaPaths = db
+    .select({ path: journalMedia.path })
+    .from(journalMedia)
+    .where(and(eq(journalMedia.userId, user.id), eq(journalMedia.journalEntryId, existing.id)))
+    .all()
+    .map((row) => row.path);
+
   db.delete(journalEntries).where(eq(journalEntries.id, existing.id)).run();
+
+  for (const relativePath of mediaPaths) {
+    removeMediaFile(relativePath);
+  }
 
   return reply.send({ deleted: true });
 });
@@ -3180,6 +3245,219 @@ app.get("/api/ai/knowledge", async (_request, reply) => {
     observations: recentObservations,
     stillLearning,
   });
+});
+
+function findJournalEntryForDate(userId: string, entryDate: string) {
+  return db
+    .select()
+    .from(journalEntries)
+    .where(and(eq(journalEntries.userId, userId), eq(journalEntries.entryDate, entryDate)))
+    .limit(1)
+    .all()[0];
+}
+
+app.get("/api/journals/:date/media", async (request, reply) => {
+  const user = findActiveUser();
+  if (!user) {
+    return reply.code(404).send({ error: "No active user" });
+  }
+
+  const params = request.params as { date?: string };
+  const dateParsed = journalDateParam.safeParse(params.date);
+  if (!dateParsed.success) {
+    return reply.code(400).send({ error: dateParsed.error.issues[0]?.message ?? "Invalid date" });
+  }
+  const entryDate = dateParsed.data;
+
+  const entry = findJournalEntryForDate(user.id, entryDate);
+  if (entry === undefined) {
+    return reply.send({ media: [] });
+  }
+
+  const rows = db
+    .select()
+    .from(journalMedia)
+    .where(and(eq(journalMedia.userId, user.id), eq(journalMedia.journalEntryId, entry.id)))
+    .orderBy(asc(journalMedia.createdAt))
+    .all();
+
+  return reply.send({ media: rows.map((row) => toMediaResponse(row, entryDate)) });
+});
+
+const mediaUploadBody = z.object({
+  dataUrl: z.string().min(1),
+});
+
+app.post(
+  "/api/journals/:date/media",
+  { bodyLimit: MEDIA_MAX_BODY_BYTES },
+  async (request, reply) => {
+    const user = findActiveUser();
+    if (!user) {
+      return reply.code(404).send({ error: "No active user" });
+    }
+
+    const params = request.params as { date?: string };
+    const dateParsed = journalDateParam.safeParse(params.date);
+    if (!dateParsed.success) {
+      return reply.code(400).send({ error: dateParsed.error.issues[0]?.message ?? "Invalid date" });
+    }
+    const entryDate = dateParsed.data;
+
+    const parsed = mediaUploadBody.safeParse(request.body);
+    if (!parsed.success) {
+      return reply.code(400).send({ error: "An image is required" });
+    }
+
+    const match = parsed.data.dataUrl.match(/^data:(image\/(?:jpeg|png|webp));base64,([\s\S]+)$/);
+    if (match === null) {
+      return reply.code(400).send({ error: "Unsupported image format. Use JPEG, PNG or WebP." });
+    }
+
+    const mimeType = match[1];
+    const bytes = Buffer.from(match[2], "base64");
+    if (bytes.length === 0) {
+      return reply.code(400).send({ error: "The image could not be decoded" });
+    }
+    if (bytes.length > MEDIA_MAX_BYTES) {
+      return reply.code(413).send({ error: "Image is too large. Maximum size is 5 MB." });
+    }
+
+    const extension = MEDIA_MIME_EXTENSIONS[mimeType];
+    const mediaId = randomUUID();
+    const relativeDir = `${user.id}/${entryDate}`;
+    const relativePath = `${relativeDir}/${mediaId}.${extension}`;
+    const absolutePath = resolveMediaPath(relativePath);
+    if (absolutePath === null) {
+      return reply.code(400).send({ error: "Invalid media path" });
+    }
+
+    const now = nowIso();
+    const entry = findJournalEntryForDate(user.id, entryDate);
+    if (entry === undefined) {
+      return reply.code(404).send({ error: "Save the journal before adding an image" });
+    }
+
+    const previous = db
+      .select()
+      .from(journalMedia)
+      .where(and(eq(journalMedia.userId, user.id), eq(journalMedia.journalEntryId, entry.id)))
+      .all();
+
+    const row = {
+      id: mediaId,
+      userId: user.id,
+      journalEntryId: entry.id,
+      mediaType: "image",
+      path: relativePath,
+      createdAt: now,
+    };
+
+    try {
+      mkdirSync(join(mediaRoot(), relativeDir), { recursive: true });
+      writeFileSync(absolutePath, bytes);
+      db.insert(journalMedia).values(row).run();
+    } catch (err) {
+      app.log.error(err);
+      removeMediaFile(relativePath);
+      return reply.code(500).send({ error: "Failed to save image" });
+    }
+
+    for (const old of previous) {
+      db.delete(journalMedia).where(eq(journalMedia.id, old.id)).run();
+      removeMediaFile(old.path);
+    }
+
+    return reply.code(201).send({ media: toMediaResponse(row, entryDate) });
+  },
+);
+
+app.get("/api/journals/:date/media/:mediaId", async (request, reply) => {
+  const user = findActiveUser();
+  if (!user) {
+    return reply.code(404).send({ error: "No active user" });
+  }
+
+  const params = request.params as { date?: string; mediaId?: string };
+  const dateParsed = journalDateParam.safeParse(params.date);
+  if (!dateParsed.success) {
+    return reply.code(400).send({ error: dateParsed.error.issues[0]?.message ?? "Invalid date" });
+  }
+  const entryDate = dateParsed.data;
+
+  const entry = findJournalEntryForDate(user.id, entryDate);
+  if (entry === undefined) {
+    return reply.code(404).send({ error: "Media not found" });
+  }
+
+  const row = db
+    .select()
+    .from(journalMedia)
+    .where(
+      and(
+        eq(journalMedia.id, params.mediaId ?? ""),
+        eq(journalMedia.userId, user.id),
+        eq(journalMedia.journalEntryId, entry.id),
+      ),
+    )
+    .limit(1)
+    .all()[0];
+  if (row === undefined) {
+    return reply.code(404).send({ error: "Media not found" });
+  }
+
+  const absolutePath = resolveMediaPath(row.path);
+  if (absolutePath === null || !existsSync(absolutePath)) {
+    return reply.code(404).send({ error: "Media file not found" });
+  }
+
+  const extension = row.path.slice(row.path.lastIndexOf(".") + 1).toLowerCase();
+  const contentType = MEDIA_CONTENT_TYPES[extension];
+  if (contentType === undefined) {
+    return reply.code(404).send({ error: "Media file not found" });
+  }
+
+  return reply.type(contentType).send(readFileSync(absolutePath));
+});
+
+app.delete("/api/journals/:date/media/:mediaId", async (request, reply) => {
+  const user = findActiveUser();
+  if (!user) {
+    return reply.code(404).send({ error: "No active user" });
+  }
+
+  const params = request.params as { date?: string; mediaId?: string };
+  const dateParsed = journalDateParam.safeParse(params.date);
+  if (!dateParsed.success) {
+    return reply.code(400).send({ error: dateParsed.error.issues[0]?.message ?? "Invalid date" });
+  }
+  const entryDate = dateParsed.data;
+
+  const entry = findJournalEntryForDate(user.id, entryDate);
+  if (entry === undefined) {
+    return reply.code(404).send({ error: "Media not found" });
+  }
+
+  const row = db
+    .select()
+    .from(journalMedia)
+    .where(
+      and(
+        eq(journalMedia.id, params.mediaId ?? ""),
+        eq(journalMedia.userId, user.id),
+        eq(journalMedia.journalEntryId, entry.id),
+      ),
+    )
+    .limit(1)
+    .all()[0];
+  if (row === undefined) {
+    return reply.code(404).send({ error: "Media not found" });
+  }
+
+  db.delete(journalMedia).where(eq(journalMedia.id, row.id)).run();
+  removeMediaFile(row.path);
+
+  return reply.send({ deleted: true });
 });
 
 app.listen({ port: PORT, host: "127.0.0.1" }).then(() => {

@@ -10,7 +10,7 @@ import {
 import logo from './assets/images/logo-nobg.webp'
 import { InteractiveBook } from './components/InteractiveBook'
 import { AboutPage } from './components/AboutPage'
-import { AnalyticsAIView } from './components/AnalyticsAIView'
+import { AnalyticsAIView, type AnalyticsMessage } from './components/AnalyticsAIView'
 import { CalendarView } from './components/CalendarView'
 import { GoalsView } from './components/GoalsView'
 import { LibraryView } from './components/LibraryView'
@@ -234,6 +234,7 @@ function App() {
     return defaultTextStyle
   })
   const [selectedJournalDate, setSelectedJournalDate] = useState<string>(() => toDateKey(new Date()))
+  const [analyticsMessages, setAnalyticsMessages] = useState<AnalyticsMessage[]>([])
   const [journalState, setJournalState] = useState<JournalState>(INITIAL_JOURNAL_STATE)
   const [journalDatesState, setJournalDatesState] = useState<JournalDatesState | null>(null)
   const [streakState, setStreakState] = useState<StreakState | null>(null)
@@ -910,7 +911,11 @@ function App() {
                         </div>
 
                       {activeSidebarTab === 'Analytics' && (
-                        <AnalyticsAIView selectedJournalDate={selectedJournalDate} />
+                        <AnalyticsAIView
+                          selectedJournalDate={selectedJournalDate}
+                          messages={analyticsMessages}
+                          onMessagesChange={setAnalyticsMessages}
+                        />
                       )}
 
                       {activeSidebarTab === 'Calendar' && (

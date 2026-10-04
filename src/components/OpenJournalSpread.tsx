@@ -47,9 +47,23 @@ import {
   confirmMemory,
   updateMemory,
   getAiKnowledge,
+  getJournalMedia,
+  saveJournalMedia,
+  deleteJournalMedia,
 } from '../lib/api'
 
 type WeatherType = 'sunny' | 'partlyCloudy' | 'rainy' | 'windy' | 'snowy'
+
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024
+
+const ALLOWED_PHOTO_TYPES = ['image/jpeg', 'image/png', 'image/webp']
+
+interface PhotoState {
+  date: string
+  url: string
+  mediaId: string | null
+  dirtyDataUrl: string | null
+}
 
 const MEMORY_STATUS_MESSAGES = [
   'Looking across your recent entries...',
@@ -87,7 +101,9 @@ export function OpenJournalSpread({
 }: OpenJournalSpreadProps) {
   const [weather, setWeather] = useState<WeatherType>('sunny')
   const [isWeatherPickerOpen, setIsWeatherPickerOpen] = useState(false)
-  const [photoUrl, setPhotoUrl] = useState<string>(defaultPhoto)
+  const [photoState, setPhotoState] = useState<PhotoState | null>(null)
+  const [isSavingPhoto, setIsSavingPhoto] = useState(false)
+  const [photoError, setPhotoError] = useState<string | null>(null)
   const [topic, setTopic] = useState('')
   const [isEditingTopic, setIsEditingTopic] = useState(false)
   const [selectedMood, setSelectedMood] = useState<string>('Peaceful')
@@ -132,6 +148,9 @@ export function OpenJournalSpread({
   const moodDropdownRef = useRef<HTMLDivElement>(null)
   const dailyQuote = entryDate && quoteState?.date === entryDate ? quoteState.value : null
   const observations = entryDate && observationState?.date === entryDate ? observationState.items : []
+
+const photo = entryDate && photoState?.date === entryDate ? photoState : null
+  const photoUrl = photo ? photo.url : defaultPhoto
 
   const displayDate = entryDate
     ? (() => {
@@ -549,21 +568,40 @@ export function OpenJournalSpread({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
+  function applyPhotoFile(file: File, date: string) {
+    if (!ALLOWED_PHOTO_TYPES.includes(file.type)) {
+      setPhotoError('Unsupported image format. Use JPEG, PNG or WebP.')
+      return
+    }
+    if (file.size > MAX_PHOTO_BYTES) {
+      setPhotoError('Image is too large. Maximum size is 5 MB.')
+      return
+    }
+
+    const reader = new FileReader()
+    reader.onload = (event) => {
+      const result = event.target?.result
+      if (typeof result !== 'string') return
+      setPhotoState((prev) => ({
+        date,
+        url: result,
+        mediaId: prev?.date === date ? prev.mediaId : null,
+        dirtyDataUrl: result,
+      }))
+      setPhotoError(null)
+    }
+    reader.readAsDataURL(file)
+  }
+
   useEffect(() => {
     function handlePaste(e: ClipboardEvent) {
-      if (!e.clipboardData) return
+      if (!entryDate || !e.clipboardData) return
       const items = e.clipboardData.items
       for (let i = 0; i < items.length; i++) {
         if (items[i].type.indexOf('image') !== -1) {
           const file = items[i].getAsFile()
           if (file) {
-            const reader = new FileReader()
-            reader.onload = (event) => {
-              if (event.target?.result) {
-                setPhotoUrl(event.target.result as string)
-              }
-            }
-            reader.readAsDataURL(file)
+            applyPhotoFile(file, entryDate)
             break
           }
         }
@@ -571,18 +609,13 @@ export function OpenJournalSpread({
     }
     window.addEventListener('paste', handlePaste)
     return () => window.removeEventListener('paste', handlePaste)
-  }, [])
+  }, [entryDate])
 
   function handleImageUpload(e: React.ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0]
-    if (file) {
-      const reader = new FileReader()
-      reader.onload = (event) => {
-        if (event.target?.result) {
-          setPhotoUrl(event.target.result as string)
-        }
-      }
-      reader.readAsDataURL(file)
+    e.target.value = ''
+    if (file && entryDate) {
+      applyPhotoFile(file, entryDate)
     }
   }
 
@@ -720,6 +753,39 @@ export function OpenJournalSpread({
     }
   }, [entryDate])
 
+  useEffect(() => {
+    if (!entryDate) return
+
+    const controller = new AbortController()
+
+    getJournalMedia(entryDate, controller.signal)
+      .then((items) => {
+        if (controller.signal.aborted) return
+        const first = items[0]
+        setPhotoState({
+          date: entryDate,
+          url: first ? first.url : defaultPhoto,
+          mediaId: first ? first.id : null,
+          dirtyDataUrl: null,
+        })
+        setPhotoError(null)
+      })
+      .catch((err: unknown) => {
+        if (controller.signal.aborted) return
+        if (err instanceof DOMException && err.name === 'AbortError') return
+        setPhotoState({
+          date: entryDate,
+          url: defaultPhoto,
+          mediaId: null,
+          dirtyDataUrl: null,
+        })
+      })
+
+    return () => {
+      controller.abort()
+    }
+  }, [entryDate])
+
   async function generateObservations() {
     if (!entryDate || isGenerating) return
 
@@ -835,12 +901,42 @@ export function OpenJournalSpread({
     }
   }
 
+  async function persistPhoto(date: string, dataUrl: string) {
+    const saved = await saveJournalMedia(date, dataUrl)
+    setPhotoState((prev) => {
+      if (!prev || prev.date !== date || prev.dirtyDataUrl !== dataUrl) return prev
+      return { date, url: saved.url, mediaId: saved.id, dirtyDataUrl: null }
+    })
+  }
+
+  async function removePhoto() {
+    if (!entryDate || isSavingPhoto) return
+    const date = entryDate
+    const pending = photo
+    if (!pending || pending.url === defaultPhoto) return
+
+    setIsSavingPhoto(true)
+    setPhotoError(null)
+    try {
+      if (pending.mediaId) {
+        await deleteJournalMedia(date, pending.mediaId)
+      }
+      setPhotoState({ date, url: defaultPhoto, mediaId: null, dirtyDataUrl: null })
+    } catch (err) {
+      setPhotoError(err instanceof Error ? err.message : 'Could not remove image')
+    } finally {
+      setIsSavingPhoto(false)
+    }
+  }
+
   const handleSave = async () => {
     if (!onSave || !entryDate || isLoading) return
     const html = editorRef.current?.innerHTML ?? entryHtml
     const text = editorRef.current?.innerText ?? entryText
     setEntryHtml(html)
     setEntryText(text)
+    const date = entryDate
+    const pendingDataUrl = photo?.date === date ? photo.dirtyDataUrl : null
     const input: SaveJournalInput = {
       content: html,
       topic: topic.trim() ? topic.trim() : null,
@@ -850,6 +946,21 @@ export function OpenJournalSpread({
     }
     try {
       await onSave(input)
+      if (pendingDataUrl) {
+        setIsSavingPhoto(true)
+        setPhotoError(null)
+        try {
+          await persistPhoto(date, pendingDataUrl)
+        } catch (err) {
+          setPhotoError(
+            `Journal saved, but the image could not be saved: ${
+              err instanceof Error ? err.message : 'unknown error'
+            }`,
+          )
+        } finally {
+          setIsSavingPhoto(false)
+        }
+      }
       if (text.trim() !== '' && observations.length === 0) {
         void generateObservations()
       }
@@ -963,13 +1074,14 @@ export function OpenJournalSpread({
                   <img
                     src={photoUrl}
                     alt="Journal moment"
-                    className="w-full h-full object-cover select-none"
+                    className={`w-full h-full object-cover select-none ${isSavingPhoto ? 'opacity-60' : ''}`}
                   />
                   <div className="absolute inset-0 bg-slate-900/40 opacity-0 group-hover/photo:opacity-100 transition-opacity flex items-center justify-center gap-1.5">
                     <button
                       type="button"
                       onClick={() => fileInputRef.current?.click()}
-                      className="px-2.5 py-1 rounded-md bg-white/95 text-slate-800 text-[11px] font-semibold shadow-sm hover:bg-white flex items-center gap-1 cursor-pointer transition-transform hover:scale-105"
+                      disabled={isSavingPhoto}
+                      className="px-2.5 py-1 rounded-md bg-white/95 text-slate-800 text-[11px] font-semibold shadow-sm hover:bg-white flex items-center gap-1 cursor-pointer transition-transform hover:scale-105 disabled:opacity-50"
                       title="Upload photo"
                     >
                       <Upload className="w-3.5 h-3.5" />
@@ -978,20 +1090,30 @@ export function OpenJournalSpread({
                     {photoUrl !== defaultPhoto && (
                       <button
                         type="button"
-                        onClick={() => setPhotoUrl(defaultPhoto)}
-                        className="p-1 rounded-md bg-white/95 text-slate-800 shadow-sm hover:bg-white cursor-pointer transition-transform hover:scale-105"
-                        title="Reset photo"
+                        onClick={removePhoto}
+                        disabled={isSavingPhoto}
+                        className="p-1 rounded-md bg-white/95 text-slate-800 shadow-sm hover:bg-white cursor-pointer transition-transform hover:scale-105 disabled:opacity-50"
+                        title="Remove photo"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
                       </button>
                     )}
                   </div>
+                  {isSavingPhoto && (
+                    <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                      <Loader2 className="w-4 h-4 animate-spin text-white" />
+                    </div>
+                  )}
                 </div>
+
+                {photoError && (
+                  <p className="text-[10px] text-rose-600 leading-tight pt-1">{photoError}</p>
+                )}
 
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/*"
+                  accept="image/jpeg,image/png,image/webp"
                   onChange={handleImageUpload}
                   className="hidden"
                 />

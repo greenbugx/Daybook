@@ -21,4 +21,4 @@ sqlite.pragma("foreign_keys = ON");
 export const db = drizzle(sqlite, { schema });
 
 export type AppDatabase = typeof db;
-export { dbPath, schema };
+export { dataDir, dbPath, schema };
