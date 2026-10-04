@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { existsSync, mkdirSync, readdirSync, readFileSync, rmdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join, resolve, sep } from "node:path";
 import Fastify from "fastify";
-import { and, eq, gte, inArray, lte, lt, asc, desc, sql } from "drizzle-orm";
+import { and, eq, gte, inArray, lte, lt, asc, desc, or, sql } from "drizzle-orm";
 import { z } from "zod";
 import { Ollama } from "ollama";
 import { dataDir, db } from "./db/client.js";
@@ -2225,7 +2225,7 @@ app.get("/api/quotes/saved", async (_request, reply) => {
 
   return reply.send({
     quotes: rows.map((row) => {
-      const quote = findCuratedQuoteByRowId(user.id, row.rowId);
+      const quote = findCuratedQuoteByRowId(user.id, row.rowId) ?? CURATED_QUOTES.find((q) => q.text === row.text);
       return {
         id: row.rowId,
         text: row.text,
@@ -2245,8 +2245,14 @@ app.post("/api/quotes/:quoteId/save", async (request, reply) => {
 
   const params = request.params as { quoteId?: string };
   const rowId = params.quoteId ?? "";
-  const quote = findCuratedQuoteByRowId(user.id, rowId);
-  if (quote === null) {
+  if (!rowId) {
+    return reply.code(400).send({ error: "Quote ID is required" });
+  }
+
+  const curatedQuote = findCuratedQuoteByRowId(user.id, rowId);
+  const existingQuoteRow = db.select().from(quotes).where(eq(quotes.id, rowId)).limit(1).all()[0];
+
+  if (curatedQuote === null && existingQuoteRow === undefined) {
     return reply.code(404).send({ error: "Quote not found" });
   }
 
@@ -2263,13 +2269,13 @@ app.post("/api/quotes/:quoteId/save", async (request, reply) => {
   const now = nowIso();
   db.transaction((tx) => {
     const quoteRow = tx.select().from(quotes).where(eq(quotes.id, rowId)).limit(1).all()[0];
-    if (quoteRow === undefined) {
+    if (quoteRow === undefined && curatedQuote !== null) {
       tx.insert(quotes)
         .values({
           id: rowId,
           userId: user.id,
           journalEntryId: null,
-          text: quote.text,
+          text: curatedQuote.text,
           generatedAt: now,
         })
         .run();
@@ -2295,12 +2301,17 @@ app.delete("/api/quotes/:quoteId/save", async (request, reply) => {
 
   const params = request.params as { quoteId?: string };
   const rowId = params.quoteId ?? "";
-  if (findCuratedQuoteByRowId(user.id, rowId) === null) {
-    return reply.code(404).send({ error: "Quote not found" });
+  if (!rowId) {
+    return reply.code(400).send({ error: "Quote ID is required" });
   }
 
   db.delete(savedQuotes)
-    .where(and(eq(savedQuotes.userId, user.id), eq(savedQuotes.quoteId, rowId)))
+    .where(
+      and(
+        eq(savedQuotes.userId, user.id),
+        or(eq(savedQuotes.quoteId, rowId), eq(savedQuotes.id, rowId))
+      )
+    )
     .run();
 
   return reply.send({ saved: false });

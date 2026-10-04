@@ -220,7 +220,15 @@ function App() {
     }
     return 'Home'
   })
-  const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab>('Book')
+  const [activeSidebarTab, setActiveSidebarTab] = useState<SidebarTab>(() => {
+    if (typeof window !== 'undefined') {
+      const tab = new URLSearchParams(window.location.search).get('tab')
+      if (tab === 'Book' || tab === 'Analytics' || tab === 'Calendar' || tab === 'Goals' || tab === 'Library' || tab === 'Settings') {
+        return tab
+      }
+    }
+    return 'Book'
+  })
   const [pendingSidebarTab, setPendingSidebarTab] = useState<SidebarTab | null>(null)
   const [isClosingBook, setIsClosingBook] = useState(false)
   const [isOpeningFromAbout, setIsOpeningFromAbout] = useState(false)
