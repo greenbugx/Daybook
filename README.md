@@ -86,7 +86,7 @@ git --version
 
 ## AI Model
 
-DayBook uses Gemma 3 4B through Ollama. It is an open-weight model running on your own hardware, which is why no API key exists anywhere in this project.
+DayBook defaults to Gemma 3 4B through Ollama, but you can select and install other models from the Settings tab. It runs entirely on your own hardware, which is why no API key exists anywhere in this project.
 
 Pull the model once:
 
@@ -106,7 +106,7 @@ You can talk to the model directly to confirm it works:
 ollama run gemma3:4b
 ```
 
-The active model name is stored per user in `app_settings`, and the Settings tab lets you change it.
+The active model is fetched dynamically. While Gemma is the default first option, the Settings tab lets you change and install different models.
 
 ## Installation
 
@@ -142,7 +142,7 @@ flowchart LR
     V -->|"proxies /api to port 3001"| B["Fastify backend"]
     B -->|"SQL, WAL mode"| D[("SQLite<br/>data/daybook.db")]
     B -->|"local HTTP"| O["Ollama"]
-    O --> G["Gemma 3 4B"]
+    O --> G["Gemma 3 (or chosen model)"]
 ```
 
 1. React frontend on port 5173
@@ -226,7 +226,7 @@ flowchart TD
     subgraph Local["On your machine only"]
         DB[("SQLite<br/>data/daybook.db")]
         FILES["Image files<br/>data/media"]
-        MODEL["Ollama<br/>Gemma 3 4B"]
+        MODEL["Ollama<br/>Chosen Model"]
     end
 
     API -->|"fetch /api/..."| ROUTES
@@ -648,7 +648,7 @@ pnpm db:studio
 
 **The Analytics tab looks empty.** The sidebar panel only renders on the Journal page. Open the journal first, then pick Analytics from the sidebar. If the book is still closing, the panel appears about half a second after the button highlights.
 
-**Answers are slow, or it says the model is unavailable.** Check that Ollama is running with `ollama serve`, and that the model is present with `ollama pull gemma3:4b`.
+**Answers are slow, or it says the model is unavailable.** Check that Ollama is running with `ollama serve`, and that your chosen model is installed (e.g., `ollama pull gemma3:4b`).
 
 **Adding an image says it is too large.** The limit is 5 MB. There is no automatic compression, so pick a smaller image or resize it yourself first.
 
