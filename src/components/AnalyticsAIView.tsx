@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect, type Dispatch, type SetStateAction } from 'react'
+import { useState, useRef, useEffect, useCallback, type Dispatch, type SetStateAction } from 'react'
 import { ArrowUp, Loader2, RotateCcw, Bot } from 'lucide-react'
-import { queryAI, type AiQueryResponse, type ReflectionIntent } from '../lib/api'
+import { queryAI, getModels, type AiQueryResponse, type ReflectionIntent } from '../lib/api'
 
 interface Message {
   id: string
@@ -51,10 +51,25 @@ export function AnalyticsAIView({
 }: AnalyticsAIViewProps) {
   const [prompt, setPrompt] = useState('')
   const [isLoading, setIsLoading] = useState(false)
+  const [activeModel, setActiveModel] = useState('Gemma 3:4B')
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
   const abortRef = useRef<AbortController | null>(null)
   const requestIdRef = useRef(0)
+
+  const loadActiveModel = useCallback((): Promise<void> => {
+    return getModels()
+      .then((data) => {
+        if (!data.active) return
+        const match = data.models.find((m) => m.id === data.active || m.tag === data.active)
+        setActiveModel(match ? match.name : data.active)
+      })
+      .catch(() => undefined)
+  }, [])
+
+  useEffect(() => {
+    void loadActiveModel()
+  }, [loadActiveModel])
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -230,7 +245,7 @@ export function AnalyticsAIView({
                 </div>
                 <div className="bg-[#FAF9F5] border border-slate-100 rounded-2xl rounded-bl-xs px-4 py-3 text-xs sm:text-sm text-slate-500 flex items-center gap-2">
                   <Loader2 className="w-3.5 h-3.5 animate-spin text-[#4f8ee6]" />
-                  <span>Reflecting with Gemma 3:4B...</span>
+                  <span>Reflecting with {activeModel}...</span>
                 </div>
               </div>
             )}
@@ -270,7 +285,7 @@ export function AnalyticsAIView({
           </button>
         </div>
         <p className="text-[11px] sm:text-xs text-center text-slate-400 mt-2 font-medium tracking-wide select-none">
-          Powered by Gemma 3:4B. Reflections run locally with Ollama.
+          Powered by {activeModel}. Reflections run locally with Ollama.
         </p>
       </div>
     </div>
