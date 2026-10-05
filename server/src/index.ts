@@ -3471,6 +3471,201 @@ app.delete("/api/journals/:date/media/:mediaId", async (request, reply) => {
   return reply.send({ deleted: true });
 });
 
+function getActiveAiModel(userId: string): string {
+  const row = db
+    .select({ aiModel: appSettings.aiModel })
+    .from(appSettings)
+    .where(eq(appSettings.userId, userId))
+    .limit(1)
+    .all()[0];
+  return row?.aiModel ?? DEFAULT_AI_MODEL;
+}
+
+const MODEL_CATALOG = [
+  {
+    id: "gemma3:4b",
+    name: "Gemma 3:4B",
+    size: "3.3 GB",
+    description: "Google DeepMind 4.3B local model, fast and optimized for reflection",
+  },
+  {
+    id: "llama3.2:3b",
+    name: "Llama 3.2:3B",
+    size: "2.0 GB",
+    description: "Meta lightweight model for rapid reasoning and conversational notes",
+  },
+  {
+    id: "mistral:7b",
+    name: "Mistral 7B",
+    size: "4.1 GB",
+    description: "High capacity model for extensive analysis and deep synthesis",
+  },
+  {
+    id: "phi3:mini",
+    name: "Phi-3 Mini",
+    size: "2.3 GB",
+    description: "Microsoft compact model for quick reflections on low resource hardware",
+  },
+];
+
+function modelBaseName(model: string): string {
+  return model.split(":")[0].toLowerCase();
+}
+
+app.get("/api/models", async (request, reply) => {
+  const user = findActiveUser();
+  if (!user) {
+    return reply.code(404).send({ error: "No active user" });
+  }
+
+  const active = getActiveAiModel(user.id);
+
+  let installed: Array<{ name: string; model: string; size: number; family: string | null }> = [];
+  let ollamaOnline = true;
+
+  try {
+    const client = new Ollama({ host: OLLAMA_HOST });
+    const response = await client.list();
+    installed = response.models.map((entry) => ({
+      name: entry.name,
+      model: entry.model,
+      size: entry.size,
+      family: entry.details?.family ?? null,
+    }));
+  } catch {
+    ollamaOnline = false;
+  }
+
+  const installedBases = new Set(installed.map((entry) => modelBaseName(entry.model)));
+
+  const models = MODEL_CATALOG.map((entry) => ({
+    ...entry,
+    tag: entry.id,
+    isInstalled: installedBases.has(modelBaseName(entry.id)),
+  }));
+
+  for (const entry of installed) {
+    if (models.some((m) => m.id === entry.model)) continue;
+    models.push({
+      id: entry.model,
+      name: entry.model,
+      tag: entry.model,
+      size: entry.size ? `${(entry.size / 1024 / 1024 / 1024).toFixed(1)} GB` : "unknown size",
+      description: entry.family ? `${entry.family} model installed locally` : "Installed local model",
+      isInstalled: true,
+    });
+  }
+
+  const activeInstalled =
+    installedBases.has(modelBaseName(active)) ||
+    installed.some((entry) => entry.model === active);
+
+  return reply.send({ models, active, activeInstalled, ollamaOnline });
+});
+
+app.post("/api/models/pull", async (request, reply) => {
+  const user = findActiveUser();
+  if (!user) {
+    return reply.code(404).send({ error: "No active user" });
+  }
+
+  const body = request.body as { model?: unknown } | null;
+  const model = typeof body?.model === "string" ? body.model.trim() : "";
+  if (model === "") {
+    return reply.code(400).send({ error: "A model name is required" });
+  }
+  if (!/^[a-zA-Z0-9._:/-]+$/.test(model)) {
+    return reply.code(400).send({ error: "Invalid model name" });
+  }
+
+  reply.hijack();
+  reply.raw.setHeader("Content-Type", "application/x-ndjson");
+  reply.raw.setHeader("Cache-Control", "no-cache");
+  reply.raw.setHeader("X-Accel-Buffering", "no");
+
+  const write = (payload: Record<string, unknown>) => {
+    reply.raw.write(`${JSON.stringify(payload)}\n`);
+  };
+
+  try {
+    const client = new Ollama({ host: OLLAMA_HOST });
+    const stream = await client.pull({ model, stream: true });
+    for await (const progress of stream) {
+      write({
+        status: progress.status,
+        completed: progress.completed,
+        total: progress.total,
+        percent:
+          progress.total && progress.total > 0
+            ? Math.round((progress.completed / progress.total) * 100)
+            : null,
+      });
+    }
+    write({ status: "success", done: true });
+  } catch (err) {
+    write({ error: err instanceof Error ? err.message : "Failed to install model" });
+  }
+
+  reply.raw.end();
+  return reply;
+});
+
+app.put("/api/settings/model", async (request, reply) => {
+  const user = findActiveUser();
+  if (!user) {
+    return reply.code(404).send({ error: "No active user" });
+  }
+
+  const body = request.body as { model?: unknown } | null;
+  const model = typeof body?.model === "string" ? body.model.trim() : "";
+  if (model === "") {
+    return reply.code(400).send({ error: "A model name is required" });
+  }
+  if (!/^[a-zA-Z0-9._:/-]+$/.test(model)) {
+    return reply.code(400).send({ error: "Invalid model name" });
+  }
+
+  const installedNames = await (async (): Promise<string[] | null> => {
+    try {
+      const client = new Ollama({ host: OLLAMA_HOST });
+      const response = await client.list();
+      return response.models.map((entry) => entry.model);
+    } catch {
+      return null;
+    }
+  })();
+
+  if (installedNames === null) {
+    return reply.code(503).send({ error: "Could not reach Ollama" });
+  }
+
+  const isInstalled =
+    installedNames.some((name) => modelBaseName(name) === modelBaseName(model)) ||
+    installedNames.includes(model);
+
+  if (!isInstalled) {
+    return reply.code(400).send({ error: "That model is not installed yet" });
+  }
+
+  const now = nowIso();
+  db.insert(appSettings)
+    .values({
+      id: randomUUID(),
+      userId: user.id,
+      aiModel: model,
+      theme: "system",
+      createdAt: now,
+      updatedAt: now,
+    })
+    .onConflictDoUpdate({
+      target: appSettings.userId,
+      set: { aiModel: model, updatedAt: now },
+    })
+    .run();
+
+  return reply.send({ model });
+});
+
 app.listen({ port: PORT, host: "127.0.0.1" }).then(() => {
   console.log(`DayBook server listening on http://localhost:${PORT}`);
 });

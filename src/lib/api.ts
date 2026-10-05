@@ -518,6 +518,89 @@ export async function saveJournalMedia(entryDate: string, dataUrl: string): Prom
   return data.media
 }
 
+export interface ModelOption {
+  id: string
+  name: string
+  tag: string
+  size?: string
+  description?: string
+  isInstalled: boolean
+}
+
+export interface ModelsResponse {
+  models: ModelOption[]
+  active: string
+  activeInstalled: boolean
+  ollamaOnline: boolean
+}
+
+export async function getModels(): Promise<ModelsResponse> {
+  return request<ModelsResponse>('/api/models')
+}
+
+export async function setActiveModel(model: string): Promise<{ model: string }> {
+  return request<{ model: string }>('/api/settings/model', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model }),
+  })
+}
+
+export interface ModelPullProgress {
+  status?: string
+  percent?: number | null
+  completed?: number
+  total?: number
+  done?: boolean
+  error?: string
+}
+
+export async function pullModel(
+  model: string,
+  onProgress: (progress: ModelPullProgress) => void,
+): Promise<void> {
+  const res = await fetch('/api/models/pull', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model }),
+  })
+
+  if (!res.ok || !res.body) {
+    let detail = ''
+    try {
+      const body = (await res.json()) as { error?: unknown }
+      if (typeof body?.error === 'string') detail = body.error
+    } catch {
+      detail = ''
+    }
+    throw new Error(detail || `DayBook API request failed: ${res.status} ${res.statusText}`)
+  }
+
+  const reader = res.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { value, done } = await reader.read()
+    if (value) {
+      buffer += decoder.decode(value, { stream: true })
+    }
+    if (done) break
+
+    const lines = buffer.split('\n')
+    buffer = lines.pop() ?? ''
+    for (const line of lines) {
+      const trimmed = line.trim()
+      if (trimmed === '') continue
+      try {
+        onProgress(JSON.parse(trimmed) as ModelPullProgress)
+      } catch {
+        continue
+      }
+    }
+  }
+}
+
 export async function deleteJournalMedia(
   entryDate: string,
   mediaId: string,

@@ -1,14 +1,12 @@
-import { useState, useEffect } from 'react'
-import { Cpu, Check, RefreshCw, ShieldCheck } from 'lucide-react'
-
-export interface ModelOption {
-  id: string
-  name: string
-  tag: string
-  size?: string
-  description?: string
-  isInstalled?: boolean
-}
+import { useState, useEffect, useCallback } from 'react'
+import { Cpu, Check, RefreshCw, ShieldCheck, Download, Loader2 } from 'lucide-react'
+import {
+  getModels,
+  setActiveModel,
+  pullModel,
+  type ModelOption,
+  type ModelPullProgress,
+} from '../lib/api'
 
 interface SettingsViewProps {
   initialModel?: string
@@ -16,161 +14,115 @@ interface SettingsViewProps {
   onSelectModel?: (modelId: string) => void
 }
 
-const defaultModels: ModelOption[] = [
-  {
-    id: 'gemma3:4b',
-    name: 'Gemma 3:4B',
-    tag: 'gemma3:4b',
-    size: '3.3 GB',
-    description: 'Google DeepMind 4.3B local model, fast and optimized for reflection',
-    isInstalled: true
-  },
-  {
-    id: 'llama3.2:3b',
-    name: 'Llama 3.2:3B',
-    tag: 'llama3.2:3b',
-    size: '2.0 GB',
-    description: 'Meta lightweight model for rapid reasoning and conversational notes',
-    isInstalled: false
-  },
-  {
-    id: 'mistral:7b',
-    name: 'Mistral 7B',
-    tag: 'mistral:7b',
-    size: '4.1 GB',
-    description: 'High capacity model for extensive analysis and deep synthesis',
-    isInstalled: false
-  },
-  {
-    id: 'phi3:mini',
-    name: 'Phi-3 Mini',
-    tag: 'phi3:mini',
-    size: '2.3 GB',
-    description: 'Microsoft compact model for quick reflections on low resource hardware',
-    isInstalled: false
-  }
-]
+interface InstallState {
+  percent: number
+  status: string
+}
 
 export function SettingsView({
   initialModel,
   customModels,
-  onSelectModel
+  onSelectModel,
 }: SettingsViewProps) {
-  const [selectedModel, setSelectedModel] = useState<string>(() => {
-    return initialModel || localStorage.getItem('daybook_ai_model') || 'gemma3:4b'
-  })
+  const [selectedModel, setSelectedModel] = useState<string>(
+    () => initialModel || 'gemma3:4b',
+  )
+  const [models, setModels] = useState<ModelOption[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [status, setStatus] = useState<string>('Checking Ollama')
+  const [installs, setInstalls] = useState<Record<string, InstallState>>({})
+  const [error, setError] = useState<string | null>(null)
 
-  const [fetchedOllamaModels, setFetchedOllamaModels] = useState<ModelOption[]>([])
-  const [isLoadingOllama, setIsLoadingOllama] = useState(false)
-  const [ollamaStatus, setOllamaStatus] = useState<string>('Local Ollama ready')
 
-  const models: ModelOption[] = (customModels && customModels.length > 0)
-    ? customModels
-    : (fetchedOllamaModels.length > 0 ? fetchedOllamaModels : defaultModels)
+  const loadModels = useCallback((): Promise<void> => {
+    return getModels()
+      .then((data) => {
+        setModels(data.models)
+        setSelectedModel(data.active)
+        setStatus(
+          data.ollamaOnline
+            ? `Connected, ${data.models.filter((m) => m.isInstalled).length} installed`
+            : 'Ollama is not running',
+        )
+        setError(data.ollamaOnline ? null : 'Start Ollama to manage models')
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : 'Could not reach DayBook')
+        setStatus('Offline')
+      })
+      .finally(() => {
+        setIsLoading(false)
+      })
+  }, [])
 
-  function parseModelsFromApi(data: { models?: Array<{ name?: string; model?: string; size?: number; details?: { family?: string } }> }) {
-    if (!data || !Array.isArray(data.models) || data.models.length === 0) {
-      return null
-    }
-    const installedIds = new Set(data.models.map((m) => m.name || m.model))
-    const updated = defaultModels.map((m) => ({
-      ...m,
-      isInstalled: installedIds.has(m.id) || installedIds.has(m.tag)
-    }))
+  useEffect(() => {
+    void loadModels()
+  }, [loadModels])
 
-    for (const item of data.models) {
-      const id = item.name || item.model
-      if (id && !updated.some((u) => u.id === id)) {
-        updated.push({
-          id,
-          name: id,
-          tag: id,
-          size: item.size ? `${(item.size / 1024 / 1024 / 1024).toFixed(1)} GB` : undefined,
-          description: item.details?.family ? `${item.details.family} model from Ollama` : 'Local Ollama model',
-          isInstalled: true
+  function handleRefresh() {
+    setIsLoading(true)
+    void loadModels()
+  }
+
+  async function installModel(model: ModelOption) {
+    if (installs[model.id]) return
+
+    setError(null)
+    setInstalls((prev) => ({ ...prev, [model.id]: { percent: 0, status: 'Starting' } }))
+
+    try {
+      await pullModel(model.id, (progress: ModelPullProgress) => {
+        if (progress.error) {
+          setError(progress.error)
+          return
+        }
+        setInstalls((prev) => {
+          const current = prev[model.id]
+          if (!current) return prev
+          return {
+            ...prev,
+            [model.id]: {
+              percent: progress.percent ?? current.percent,
+              status: progress.status ?? current.status,
+            },
+          }
         })
-      }
-    }
-    return {
-      models: updated,
-      count: data.models.length
+      })
+
+      await loadModels()
+      await setActiveModel(model.id)
+      setSelectedModel(model.id)
+      setStatus(`${model.name} installed and active`)
+      onSelectModel?.(model.id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not install model')
+    } finally {
+      setInstalls((prev) => {
+        const next = { ...prev }
+        delete next[model.id]
+        return next
+      })
     }
   }
 
-  useEffect(() => {
-    if (customModels && customModels.length > 0) {
+  async function activate(model: ModelOption) {
+    if (!model.isInstalled) {
+      await installModel(model)
       return
     }
 
-    let isMounted = true
-
-    async function loadModelsOnMount() {
-      try {
-        const res = await fetch('/api/ollama/api/tags')
-        if (!isMounted) return
-        if (res.ok) {
-          const data = await res.json()
-          if (!isMounted) return
-          const parsed = parseModelsFromApi(data)
-          if (parsed) {
-            setFetchedOllamaModels(parsed.models)
-            setOllamaStatus(`Connected (${parsed.count} installed)`)
-            return
-          }
-        }
-        if (isMounted) {
-          setOllamaStatus('Default model configured')
-        }
-      } catch (e) {
-        void e
-        if (isMounted) {
-          setOllamaStatus('Offline fallback active')
-        }
-      }
-    }
-
-    void loadModelsOnMount()
-
-    return () => {
-      isMounted = false
-    }
-  }, [customModels])
-
-  async function handleManualRefresh() {
-    setIsLoadingOllama(true)
+    setError(null)
     try {
-      const res = await fetch('/api/ollama/api/tags')
-      if (res.ok) {
-        const data = await res.json()
-        const parsed = parseModelsFromApi(data)
-        if (parsed) {
-          setFetchedOllamaModels(parsed.models)
-          setOllamaStatus(`Connected (${parsed.count} installed)`)
-          setIsLoadingOllama(false)
-          return
-        }
-      }
-      setOllamaStatus('Default model configured')
-    } catch (e) {
-      void e
-      setOllamaStatus('Offline fallback active')
-    }
-    setIsLoadingOllama(false)
-  }
-
-  function handleModelSelect(modelId: string) {
-    setSelectedModel(modelId)
-    try {
-      localStorage.setItem('daybook_ai_model', modelId)
-      window.dispatchEvent(new Event('daybook_model_changed'))
-    } catch (e) {
-      void e
-    }
-    if (onSelectModel) {
-      onSelectModel(modelId)
+      await setActiveModel(model.id)
+      setSelectedModel(model.id)
+      setStatus(`${model.name} is now active`)
+      onSelectModel?.(model.id)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Could not change model')
     }
   }
 
+  const visibleModels = customModels && customModels.length > 0 ? customModels : models
   return (
     <div className="w-full flex flex-col justify-between space-y-4 max-h-[380px] sm:max-h-[420px] overflow-y-auto pr-1 scrollbar-none">
       <div className="space-y-3">
@@ -183,13 +135,13 @@ export function SettingsView({
           </div>
           <button
             type="button"
-            onClick={handleManualRefresh}
-            disabled={isLoadingOllama}
+            onClick={handleRefresh}
+            disabled={isLoading}
             className="flex items-center gap-1.5 text-[11px] font-semibold text-[#4f8ee6] hover:text-[#3876cb] transition-colors cursor-pointer disabled:opacity-50"
             title="Scan installed models"
           >
-            <RefreshCw className={`w-3 h-3 ${isLoadingOllama ? 'animate-spin' : ''}`} />
-            <span>{ollamaStatus}</span>
+            <RefreshCw className={`w-3 h-3 ${isLoading ? 'animate-spin' : ''}`} />
+            <span>{status}</span>
           </button>
         </div>
 
@@ -197,22 +149,35 @@ export function SettingsView({
           Select the local model used for journal reflection, prompt suggestions, and pattern detection. Models run privately on your machine.
         </p>
 
+        {error && (
+          <p className="text-[11px] text-rose-600 leading-normal">{error}</p>
+        )}
+
         <div className="space-y-2.5">
-          {models.map((model) => {
+          {isLoading && visibleModels.length === 0 && (
+            <div className="flex items-center justify-center gap-2 py-6 text-xs text-slate-400">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              <span>Looking for local models</span>
+            </div>
+          )}
+
+          {visibleModels.map((model) => {
             const isSelected = selectedModel === model.id || selectedModel === model.tag
+            const install = installs[model.id]
             return (
               <button
                 key={model.id}
                 type="button"
-                onClick={() => handleModelSelect(model.id)}
-                className={`w-full p-3 sm:p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-start justify-between gap-3 ${
+                onClick={() => activate(model)}
+                disabled={Boolean(install)}
+                className={`w-full p-3 sm:p-3.5 rounded-2xl border text-left transition-all cursor-pointer flex items-start justify-between gap-3 disabled:cursor-wait ${
                   isSelected
                     ? 'bg-[#eff6fc]/70 border-[#6eafe9] shadow-xs'
                     : 'bg-[#FAF9F5] border-slate-200/80 hover:border-slate-300 hover:bg-slate-100/50'
                 }`}
               >
                 <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-wrap">
                     <span className="text-sm font-bold text-[#1a2b49]">
                       {model.name}
                     </span>
@@ -221,9 +186,13 @@ export function SettingsView({
                         {model.size}
                       </span>
                     )}
-                    {model.isInstalled && (
+                    {model.isInstalled ? (
                       <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-50 text-emerald-700 border border-emerald-200/60">
                         Installed
+                      </span>
+                    ) : (
+                      <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-md bg-white text-slate-500 border border-slate-200/70">
+                        Not installed
                       </span>
                     )}
                   </div>
@@ -232,17 +201,42 @@ export function SettingsView({
                       {model.description}
                     </p>
                   )}
+
+                  {install && (
+                    <div className="mt-2 space-y-1">
+                      <div className="w-full h-1.5 bg-slate-200/70 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-[#6eafe9] rounded-full transition-all duration-300"
+                          style={{ width: `${install.percent}%` }}
+                        />
+                      </div>
+                      <div className="flex items-center justify-between gap-2 text-[10px] text-slate-400">
+                        <span className="truncate">{install.status}</span>
+                        <span className="font-semibold">{install.percent}%</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="flex items-center gap-2 flex-shrink-0 mt-0.5">
-                  {isSelected ? (
+                  {install ? (
+                    <span className="flex items-center gap-1 text-[11px] font-bold text-white bg-[#6eafe9] px-2.5 py-1 rounded-full shadow-2xs">
+                      <Loader2 className="w-3 h-3 animate-spin" />
+                      <span>{install.percent}%</span>
+                    </span>
+                  ) : isSelected ? (
                     <span className="flex items-center gap-1 text-[11px] font-bold text-white bg-[#6eafe9] px-2.5 py-1 rounded-full shadow-2xs">
                       <Check className="w-3 h-3 stroke-[3]" />
                       <span>Active</span>
                     </span>
-                  ) : (
+                  ) : model.isInstalled ? (
                     <span className="text-[11px] font-medium text-slate-400 px-2 py-1 rounded-full border border-slate-200 bg-white">
                       Select
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-[11px] font-semibold text-[#4f8ee6] px-2 py-1 rounded-full border border-[#6eafe9]/50 bg-white">
+                      <Download className="w-3 h-3" />
+                      <span>Install</span>
                     </span>
                   )}
                 </div>
